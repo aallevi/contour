@@ -172,6 +172,25 @@ function gridColours(): Pick[][] {
   return rows;
 }
 
+/**
+ * A 2D slider: press and drag anywhere in it. The press is kept from starting a
+ * text selection, which otherwise highlights the page as the pointer leaves.
+ */
+function drag2d(area: HTMLElement, move: (e: PointerEvent) => void): void {
+  let dragging: number | null = null;
+  area.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    move(e);
+    dragging = e.pointerId;
+    try { area.setPointerCapture(e.pointerId); } catch { /* the move still follows while over the area */ }
+  });
+  area.addEventListener('pointermove', (e) => { if (dragging === e.pointerId) move(e); });
+  const end = (e: PointerEvent) => { if (dragging === e.pointerId) dragging = null; };
+  area.addEventListener('pointerup', end);
+  area.addEventListener('pointercancel', end);
+  area.addEventListener('lostpointercapture', end);
+}
+
 /** The popover, opened from the mark in the toolbar. */
 export function guiColourButton(trigger: HTMLElement): void {
   let choices = load();
@@ -215,6 +234,39 @@ export function guiColourButton(trigger: HTMLElement): void {
     }
   }
 
+  // The fluid swatch: every hue across, white at the top through the pure
+  // colour at the middle to black at the bottom — Apple's Spectrum, one 2D
+  // slider for the whole range. The field below then refines the pick.
+  const spectrum = el('div', 'gui-spectrum');
+  const specKnob = el('span', 'gui-knob');
+  spectrum.append(specKnob);
+  const dragSpectrum = (e: PointerEvent) => {
+    const r = spectrum.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    const h = Math.min(359.9, x * 360);
+    commit(y < 0.5
+      ? { h, s: y * 2, v: 1, vivid: current().vivid }
+      : { h, s: 1, v: 2 - y * 2, vivid: current().vivid });
+  };
+  drag2d(spectrum, dragSpectrum);
+
+  const views = el('div', 'segmented gui-views');
+  let view: 'squares' | 'spectrum' = 'squares';
+  try { if (localStorage.getItem('contour.gui-view') === 'spectrum') view = 'spectrum'; } catch { /* default */ }
+  const viewButtons = (['squares', 'spectrum'] as const).map((v) => {
+    const b = el('button', 'seg');
+    b.type = 'button';
+    b.textContent = v === 'squares' ? 'Squares' : 'Spectrum';
+    b.addEventListener('click', () => {
+      view = v;
+      try { localStorage.setItem('contour.gui-view', v); } catch { /* lasts as long as the page */ }
+      sync();
+    });
+    views.append(b);
+    return { b, v };
+  });
+
   // Saturation across, brightness up, at the current hue.
   const field = el('div', 'gui-field');
   const knob = el('span', 'gui-knob');
@@ -225,11 +277,7 @@ export function guiColourButton(trigger: HTMLElement): void {
     const v = Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height));
     commit({ ...current(), s, v });
   };
-  field.addEventListener('pointerdown', (e) => {
-    field.setPointerCapture(e.pointerId);
-    dragField(e);
-  });
-  field.addEventListener('pointermove', (e) => { if (field.hasPointerCapture(e.pointerId)) dragField(e); });
+  drag2d(field, dragField);
 
   const range = (cls: string, label: string, max: number, step: number) => {
     const row = el('label', 'gui-range');
@@ -293,7 +341,7 @@ export function guiColourButton(trigger: HTMLElement): void {
   });
   groundRow.append(groundLabel, groundSeg);
 
-  pop.append(head, tabs, grid, field, hue.row, bright.row, vivid.row, hexRow, groundRow);
+  pop.append(head, tabs, views, grid, spectrum, field, hue.row, bright.row, vivid.row, hexRow, groundRow);
   document.body.append(pop);
 
   reset.addEventListener('click', () => {
@@ -328,6 +376,11 @@ export function guiColourButton(trigger: HTMLElement): void {
     }
     swatch.style.background = css(p);
     if (document.activeElement !== hexIn) hexIn.value = hex(hsvToRgb(p.h, p.s, p.v));
+    for (const { b, v } of viewButtons) b.classList.toggle('on', v === view);
+    grid.hidden = view !== 'squares';
+    spectrum.hidden = view !== 'spectrum';
+    specKnob.style.left = `${(p.h / 360) * 100}%`;
+    specKnob.style.top = `${(p.v >= 0.999 ? p.s / 2 : 1 - p.v / 2) * 100}%`;
     resetOne.disabled = !choices[target];
     const ground = document.documentElement.dataset.ground ?? 'marbled';
     for (const { b, g } of groundButtons) b.classList.toggle('on', g.value === ground);

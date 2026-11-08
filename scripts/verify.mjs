@@ -273,6 +273,25 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   check(43, 'a sheet with no paper shows the marbled check', gui.marble);
   check(43, 'Clear paper switches to the plain check and back', gui.ground.check && gui.ground.marbled);
 
+  // Dragging a 2D slider out across the page selects nothing; Spectrum picks.
+  await p.click('.brand');
+  await p.click('.gui-tabs .seg:nth-child(1)');
+  await p.click('.gui-views .seg:nth-child(2)');
+  const spec = await p.locator('.gui-spectrum').boundingBox();
+  await p.mouse.move(spec.x + spec.width * 0.6, spec.y + spec.height * 0.5);
+  await p.mouse.down();
+  await p.mouse.move(spec.x + spec.width * 0.66, spec.y + spec.height * 0.25, { steps: 5 });
+  await p.mouse.move(1300, 500, { steps: 8 });
+  await p.mouse.move(spec.x + spec.width * 0.66, spec.y + spec.height * 0.25, { steps: 5 });
+  await p.mouse.up();
+  const sel = await p.evaluate(() => ({
+    selected: String(window.getSelection()), panel: getComputedStyle(document.documentElement).getPropertyValue('--panel').trim(),
+  }));
+  check(44, 'dragging across the page selects no text', sel.selected === '', JSON.stringify(sel.selected.slice(0, 40)));
+  check(44, 'the Spectrum swatch picks a colour', /^#[0-9a-f]{6}$/.test(sel.panel) && sel.panel !== '#a3b8a8', sel.panel);
+  await p.evaluate(() => { [...document.querySelectorAll('.gui-head .btn')].find((b) => b.textContent === 'Reset').click(); localStorage.removeItem('contour.gui-view'); });
+  await p.keyboard.press('Escape');
+
   check(41, 'a colour picked from the picture becomes a band', picked.n === c1 + 1 && picked.groups === picked.n, `${c1} → ${picked.n} bands, ${picked.groups} drawn`);
   await p.close();
 }

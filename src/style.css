@@ -1173,3 +1173,24 @@ body {
 .gui-colours .range { pointer-events: auto; }
 .gui-ground { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 6px; }
 .gui-ground .segmented { display: grid; grid-template-columns: 1fr 1fr; }
+
+.gui-views { display: grid; grid-template-columns: 1fr 1fr; }
+.gui-grid[hidden], .gui-spectrum[hidden] { display: none; }
+.gui-spectrum {
+  position: relative;
+  height: 150px;
+  border: 1px solid var(--line);
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    linear-gradient(to bottom, #fff, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0) 50%, #000),
+    linear-gradient(to right, #f00, #ff0 16.67%, #0f0 33.33%, #0ff 50%, #00f 66.67%, #f0f 83.33%, #f00);
+}
+
+/* Dragging a control must not select the words around it: the chrome is not
+   text to copy, so only fields and the help text take a selection. */
+.toolbar, .sidebar, .statusbar, .stage, .gui-colours {
+  -webkit-user-select: none;
+  user-select: none;
+}
+input, textarea, .help, .source-name { -webkit-user-select: text; user-select: text; }

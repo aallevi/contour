@@ -102,8 +102,8 @@ npm run install-app      # macOS: build and copy into /Applications (add -- --la
    to see the photograph faintly through the paper. It is only a view and never
    appears in an export.
 6. **Your colours.** Click the scissors mark, top left, to recolour the
-   interface: *Fill*, *Lines* and *Text*, each from a grid of little squares or
-   a saturation and brightness field with hue and *Vivid* (Display P3) sliders.
+   interface: *Fill*, *Lines* and *Text*, each from a grid of little squares or a
+   fluid *Spectrum* swatch, then a saturation and brightness field with hue and *Vivid* (Display P3) sliders.
    *Reset* brings back the green. With the paper set to *None*, the sheet shows
    a marbled check; *Clear paper* in the same popover switches it back to the
    plain one.
