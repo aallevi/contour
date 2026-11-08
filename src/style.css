@@ -1219,3 +1219,17 @@ input, textarea, .help, .source-name { -webkit-user-select: text; user-select: t
 polyline.shape-line { fill: none; }
 .shape-dot { fill: var(--accent); stroke: #000; stroke-width: 1; }
 .shape-dot.first { fill: #fff; }
+
+/* -- several bands, and groups ------------------------------------------- */
+
+.band-row.primary { background: var(--field); box-shadow: inset 3px 0 0 var(--accent); }
+.band-row.selected:not(.primary) { background: color-mix(in oklab, var(--field), var(--accent) 14%); box-shadow: inset 3px 0 0 color-mix(in oklab, var(--accent), var(--panel) 45%); }
+.band-row[hidden] { display: none; }
+.band-row.in-group { padding-left: 22px; }
+.group-row { background: var(--panel-2); font-weight: 700; }
+.group-row:hover { background: color-mix(in oklab, var(--panel-2), #fff 12%); }
+.group-twist { width: 14px; }
+.group-name { flex: 1; min-width: 0; text-align: left; }
+.multi-actions { display: grid; grid-template-columns: repeat(3, 1fr); margin: 4px 0; }
+.multi-actions .btn { border-right-width: 0; }
+.multi-actions .btn:last-child { border-right-width: 1px; }

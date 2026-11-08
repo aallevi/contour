@@ -214,6 +214,71 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   await p.evaluate(() => window.contour.store.updateCanvas({ paper: [1, 1, 1] }));
   await settle(p);
 
+  // Several bands at once: select a run, edit them together, group, blend.
+  await p.evaluate(() => window.contour.applyPreset('Three-tone poster'));
+  await p.waitForTimeout(300);
+  await settle(p);
+  const rows = p.locator('.band-list .band-row:not(.group-row)');
+  await rows.nth(0).click();
+  await rows.nth(2).click({ modifiers: ['Shift'] });
+  const run = await p.evaluate(() => window.contour.ctx.selectedBands().length);
+  check(47, 'Shift-click selects a run of bands', run === 3, `${run} selected`);
+  await p.evaluate(() => [...document.querySelectorAll('.panel .seg')].find((b) => b.textContent === 'Hatch').click());
+  await settle(p);
+  const kinds = await p.evaluate(() => window.contour.store.get().bands.slice(0, 3).map((b) => b.fill.kind).join(','));
+  check(47, 'switching the fill switches every selected band', kinds === 'hatch,hatch,hatch', kinds);
+  await p.evaluate(() => {
+    const s = window.contour.store; const b = s.get().bands;
+    s.updateBand(b[1].id, { fill: { ...b[1].fill, angle: 10 } });
+    s.updateBand(b[2].id, { fill: { ...b[2].fill, angle: 80 } });
+  });
+  await rows.nth(0).click();
+  await rows.nth(2).click({ modifiers: ['Shift'] });
+  await rows.nth(0).click({ modifiers: ['Meta'] });
+  await rows.nth(0).click({ modifiers: ['Meta'] });
+  const fan = await p.evaluate(() => {
+    const ed = window.contour.ctx;
+    const ids = ed.selectedBands();
+    const primary = ed.selectedBand();
+    const s = window.contour.store;
+    // What the editor's spacing slider does, through the editor's own store.
+    const before = s.get().bands.map((b) => b.fill.angle);
+    document.querySelectorAll('.panel')[0];
+    return { ids: ids.length, primaryIsFirst: primary === s.get().bands[0].id, before };
+  });
+  // Drive a real editor control: the first range in the Band panel's hatch box.
+  const changed = await p.evaluate(async () => {
+    const panel = [...document.querySelectorAll('.panel')].find((x) => x.querySelector('.panel-head')?.textContent.trim().startsWith('Band') && !x.querySelector('.band-list'));
+    const ranges = [...panel.querySelectorAll('.ctrl')].filter((c) => /Spacing/.test(c.textContent) && c.offsetParent);
+    const input = ranges[0]?.querySelector('input[type=range]');
+    if (!input) return null;
+    input.value = String(Number(input.max) * 0.5);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 100));
+    return window.contour.store.get().bands.slice(0, 3).map((b) => [b.fill.spacing.toFixed(4), b.fill.angle]);
+  });
+  const sameSpacing = changed && new Set(changed.map((c) => c[0])).size === 1;
+  const ownAngles = changed && new Set(changed.map((c) => c[1])).size === 3;
+  check(47, 'an edit reaches every selected band and leaves each its own other settings', sameSpacing && ownAngles, JSON.stringify(changed) + ' ' + JSON.stringify(fan));
+  await p.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Blend colours').click());
+  await settle(p);
+  const blend = await p.evaluate(() => window.contour.store.get().bands.slice(0, 3).map((b) => b.colour.map((c) => c.toFixed(2)).join(',')));
+  check(47, 'Blend colours ramps the selection', new Set(blend).size === 3, blend.join(' | '));
+  await p.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Group').click());
+  await p.waitForTimeout(300);
+  await settle(p);
+  const grouped = await p.evaluate(() => ({
+    groups: window.contour.store.get().bands.map((b) => b.group ?? '-').join(','),
+    header: !!document.querySelector('.group-row'),
+    svg: (window.contour.scene() ? (document.querySelector('.svg-host').innerHTML.match(/id="group-Group-1"/) ?? []).length : 0),
+  }));
+  check(48, 'Group gathers the bands under a header and one SVG layer', grouped.header && grouped.groups.startsWith('Group 1,Group 1,Group 1') && grouped.svg === 1, JSON.stringify(grouped));
+  await p.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Ungroup').click());
+  await p.waitForTimeout(300);
+  await settle(p);
+  const ungrouped = await p.evaluate(() => window.contour.store.get().bands.every((b) => !b.group) && !document.querySelector('.group-row'));
+  check(48, 'Ungroup takes them out again', ungrouped);
+
   // 23: the loading bar.
   const bar = await p.evaluate(async () => {
     window.contour.store.updateBanding({ levels: 6 });

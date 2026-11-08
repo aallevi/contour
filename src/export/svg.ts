@@ -133,17 +133,39 @@ export function exportSVG(scene: Scene, opts: SVGOptions = {}): string {
   const body: string[] = [];
 
   let n = 0;
+  // A run of bands in the same group goes inside one more layer, named for the
+  // group, so an editor shows the group as a folder of its bands.
+  let layer: string | undefined;
+  const openLayer: string[] = [];
+  const closeLayer = () => {
+    if (layer === undefined) return;
+    if (openLayer.length) {
+      body.push(
+        `<g id="group-${esc(layer.replace(/[^\w-]+/g, '-'))}" inkscape:label="${esc(layer)}" ` +
+        `inkscape:groupmode="layer">${openLayer.join('')}</g>`,
+      );
+    }
+    openLayer.length = 0;
+    layer = undefined;
+  };
   for (const group of scene.groups) {
     const inner = group.nodes
       .map((node) => nodeToSVG(node, `g${n++}`, defs, shared))
       .join('');
     if (!inner) continue;
-    body.push(
+    const g =
       `<g id="${esc(group.name.replace(/[^\w-]+/g, '-'))}" ` +
       `inkscape:label="${esc(group.name)}" inkscape:groupmode="layer"` +
-      `${group.opacity < 1 ? ` opacity="${round(group.opacity)}"` : ''}>${inner}</g>`,
-    );
+      `${group.opacity < 1 ? ` opacity="${round(group.opacity)}"` : ''}>${inner}</g>`;
+    if (group.layer !== layer) closeLayer();
+    if (group.layer) {
+      layer = group.layer;
+      openLayer.push(g);
+    } else {
+      body.push(g);
+    }
   }
+  closeLayer();
 
   // Physical units on the root, user units in the viewBox.
   //

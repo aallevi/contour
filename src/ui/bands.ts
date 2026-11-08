@@ -1,7 +1,7 @@
-import { contrastInk, cssRgb, hexToRgb, lumaOf, rgbToHex } from '../core/color';
+import { contrastInk, cssRgb, hexToRgb, lumaOf, mixLab, rgbToHex } from '../core/color';
 import { paperChoices } from './panels';
 import { defaultBand, defaultFreeform, defaultGradient, gradientRamp, ID } from '../core/defaults';
-import { Dirty } from '../core/store';
+import { Dirty, type Store } from '../core/store';
 import { balancedThresholds, equalAreaThresholds, evenThresholds } from '../band/posterize';
 import type { Band, Fill, FreeformFill, Project, FreePoint, GradientFill, GradientStop, RGB, Spacing } from '../core/types';
 import {
@@ -47,28 +47,141 @@ export function bandsPanel(ctx: Ctx): Panel {
       title: 'Click the picture: that colour becomes a band of its own',
     }),
   ));
+  const selectedIds = () => ctx.selectedBands();
   p.add(buttonRow(
     button('Duplicate', () => {
-      const id = ctx.selectedBand();
-      const bands = ctx.store.get().bands;
-      const i = bands.findIndex((b) => b.id === id);
-      if (i < 0) return;
-      const copy: Band = { ...structuredClone(bands[i]), id: ID(), name: `${bands[i].name} copy` };
-      const next = [...bands];
-      next.splice(i, 0, copy);
+      const ids = new Set(selectedIds());
+      if (!ids.size) return;
+      const next: Band[] = [];
+      const copies: string[] = [];
+      for (const b of ctx.store.get().bands) {
+        if (ids.has(b.id)) {
+          const copy: Band = { ...structuredClone(b), id: ID(), name: `${b.name} copy`, threshold: Math.min(b.threshold, 0.999) };
+          next.push(copy);
+          copies.push(copy.id);
+        }
+        next.push(b);
+      }
       ctx.store.replaceBands(next, Dirty.Band, 'band:duplicate');
-      ctx.selectBand(copy.id);
+      copies.forEach((id, i) => ctx.selectBand(id, i ? 'add' : 'only'));
     }),
     button('Delete', () => {
-      const id = ctx.selectedBand();
+      const ids = new Set(selectedIds());
       const bands = ctx.store.get().bands;
-      if (bands.length <= 1 || !id) return;
-      const next = bands.filter((b) => b.id !== id);
+      const next = bands.filter((b) => !ids.has(b.id));
+      if (!ids.size || !next.length) return;
       ctx.store.replaceBands(next, Dirty.Fill, 'band:delete');
       ctx.selectBand(next[0].id);
     }),
   ));
-  p.add(help('Bands paint back to front: the last one in this list goes down first and the first one lands on top.'));
+
+  // -- several at once
+  const multi = el('div', 'multi-actions');
+  const groupBtn = button('Group', () => {
+    const ids = selectedIds();
+    if (ids.length < 2) return;
+    const bands = ctx.store.get().bands;
+    const used = new Set(bands.map((b) => b.group).filter(Boolean));
+    let n = 1;
+    while (used.has(`Group ${n}`)) n++;
+    const name = `Group ${n}`;
+    // A group is one layer, so its bands sit together: gathered at the place
+    // of the topmost, in their own order.
+    const members = bands.filter((b) => ids.includes(b.id)).map((b) => ({ ...b, group: name }));
+    const at = bands.findIndex((b) => ids.includes(b.id));
+    const rest = bands.filter((b) => !ids.includes(b.id));
+    const before = bands.slice(0, at).filter((b) => !ids.includes(b.id)).length;
+    rest.splice(before, 0, ...members);
+    ctx.store.replaceBands(rest, Dirty.Fill, 'bands:group');
+    ctx.status(`Grouped ${members.length} bands as ${name} \u2014 double-click its name to rename it`);
+  }, { title: 'Put the selected bands in one group: they stay together and export as one layer' });
+  const ungroupBtn = button('Ungroup', () => {
+    const ids = new Set(selectedIds());
+    const groups = new Set(ctx.store.get().bands.filter((b) => ids.has(b.id)).map((b) => b.group).filter(Boolean));
+    ctx.store.updateBands(
+      ctx.store.get().bands.filter((b) => ids.has(b.id) || (b.group && groups.has(b.group))).map((b) => b.id),
+      () => ({ group: undefined }),
+      'bands:ungroup',
+    );
+  }, { title: 'Take the selected bands out of their groups' });
+  const blendBtn = button('Blend colours', () => {
+    const ids = selectedIds();
+    const bands = ctx.store.get().bands.filter((b) => ids.includes(b.id));
+    if (bands.length < 3) return;
+    // A ramp across the selection, from the first band's colour to the last's,
+    // mixed in a perceptual space so the middle steps are even to the eye.
+    const first = bands[0].colour, last = bands[bands.length - 1].colour;
+    const colours = new Map(bands.map((b, i) => [b.id, mixLab(first, last, i / (bands.length - 1))]));
+    ctx.store.updateBands(ids, (b) => ({ colour: colours.get(b.id)! }), 'bands:blend');
+  }, { title: 'Ramp the colours evenly from the first selected band to the last' });
+  multi.append(groupBtn, ungroupBtn, blendBtn);
+  p.body.append(multi);
+  p.onSync(() => {
+    const n = selectedIds().length;
+    const bands = ctx.store.get().bands;
+    groupBtn.disabled = n < 2;
+    ungroupBtn.disabled = !bands.some((b) => b.group && selectedIds().includes(b.id));
+    blendBtn.disabled = n < 3;
+  });
+
+  p.add(help('Bands paint back to front: the last one in this list goes down first and the first one lands on top. Shift-click selects a run of bands and \u2318-click (Ctrl-click) adds one; the Band panel then edits them all together. Grouped bands stay together and export as one layer; double-click a group\u2019s name to rename it, click it to select its bands.'));
+
+  const collapsed = new Set<string>();
+  const groupHeader = (name: string, bands: Band[]): HTMLElement => {
+    const members = bands.filter((b) => b.group === name);
+    const head = el('div', 'band-row group-row');
+    const twist = el('button', 'band-eye group-twist');
+    twist.type = 'button';
+    twist.textContent = collapsed.has(name) ? '\u25b8' : '\u25be';
+    twist.title = collapsed.has(name) ? 'Show the group\u2019s bands' : 'Fold the group away';
+    twist.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (collapsed.has(name)) collapsed.delete(name);
+      else collapsed.add(name);
+      ctx.refresh();
+    });
+    const eye = el('button', 'band-eye');
+    eye.type = 'button';
+    const anyVisible = members.some((b) => b.visible);
+    eye.textContent = anyVisible ? '\u25c9' : '\u25cb';
+    eye.title = anyVisible ? 'Hide the whole group' : 'Show the whole group';
+    eye.addEventListener('click', (e) => {
+      e.stopPropagation();
+      ctx.store.updateBands(members.map((b) => b.id), () => ({ visible: !anyVisible }), 'group:visible');
+    });
+    const label = el('span', 'band-name');
+    label.textContent = name;
+    const meta = el('span', 'band-meta');
+    meta.textContent = `${members.length}`;
+    meta.title = `${members.length} bands`;
+    head.append(twist, eye, label, meta);
+    head.addEventListener('click', () => members.forEach((b, i) => ctx.selectBand(b.id, i ? 'add' : 'only')));
+    label.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      const input = el('input', 'ctrl-value group-name');
+      input.type = 'text';
+      input.value = name;
+      label.replaceWith(input);
+      input.focus();
+      input.select();
+      const commit = () => {
+        const next = input.value.trim();
+        const taken = bands.some((b) => b.group === next && b.group !== name);
+        if (next && next !== name && !taken) {
+          ctx.store.updateBands(members.map((b) => b.id), () => ({ group: next }), 'group:rename');
+          if (collapsed.delete(name)) collapsed.add(next);
+        } else {
+          ctx.refresh();
+        }
+      };
+      input.addEventListener('keydown', (k) => {
+        if (k.key === 'Enter') input.blur();
+        if (k.key === 'Escape') { input.value = name; input.blur(); }
+      });
+      input.addEventListener('blur', commit, { once: true });
+    });
+    return head;
+  };
 
   p.onSync(() => {
     const project = ctx.store.get();
@@ -82,9 +195,16 @@ export function bandsPanel(ctx: Ctx): Panel {
     paperNote.textContent = shares.shares.size ? `${Math.round(shares.paper * 100)}%` : '';
     paperNote.title = 'Share of the sheet where the paper shows';
 
+    const chosen = new Set(ctx.selectedBands());
+    let lastGroup: string | undefined;
     project.bands.forEach((band, index) => {
+      if (band.group && band.group !== lastGroup) list.append(groupHeader(band.group, project.bands));
+      lastGroup = band.group;
       const row = el('div', 'band-row');
-      if (band.id === selected) row.classList.add('selected');
+      if (band.group) row.classList.add('in-group');
+      if (band.group && collapsed.has(band.group)) row.hidden = true;
+      if (chosen.has(band.id)) row.classList.add('selected');
+      if (band.id === selected) row.classList.add('primary');
       row.draggable = true;
 
       const eye = el('button', 'band-eye');
@@ -122,7 +242,10 @@ export function bandsPanel(ctx: Ctx): Panel {
       }
 
       row.append(eye, swatch, name, meta);
-      row.addEventListener('click', () => ctx.selectBand(band.id));
+      row.addEventListener('click', (e) => ctx.selectBand(
+        band.id,
+        e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'only',
+      ));
 
       row.addEventListener('dragstart', (e) => {
         e.dataTransfer?.setData('text/plain', String(index));
@@ -171,9 +294,83 @@ const STIPPLE_DEFAULT = {
 };
 const GRADIENT_DEFAULT = (colour: RGB): GradientFill => defaultGradient(colour);
 
+/** A fresh fill of `kind` for this band — its own colour, its own seed. */
+function fillFor(kind: Fill['kind'], b: Band): Fill {
+  return kind === 'hatch' ? { ...HATCH_DEFAULT }
+    : kind === 'stipple' ? { ...STIPPLE_DEFAULT, seed: Math.floor(Math.random() * 1e6) }
+      : kind === 'gradient' ? GRADIENT_DEFAULT(b.colour)
+        : kind === 'freeform' ? defaultFreeform(b.colour)
+          : { kind: 'flat' };
+}
+
+/**
+ * The store as the Band editor sees it: an edit to the band on show applies to
+ * every selected band.
+ *
+ * What spreads is the change, not the band. Each patch is compared with the
+ * band on show, and only the fields that differ are written into each of the
+ * others — so moving the hatch spacing on three bands moves the spacing on all
+ * three and leaves each its own angle, and a new outline width keeps each
+ * band's outline colour. A fill setting only reaches bands with the same kind
+ * of fill; switching the kind gives every band a fill of that kind built from
+ * its own colour. One undo step undoes the lot.
+ */
+function fanOut(ctx: Ctx): Store {
+  const store = ctx.store;
+  const spread = (id: string, patch: Partial<Band>, key?: string): void => {
+    const ids = ctx.selectedBands();
+    const primary = store.band(id);
+    if (!primary || ids.length < 2 || !ids.includes(id)) {
+      store.updateBand(id, patch, key);
+      return;
+    }
+    store.updateBands(ids, (b) => {
+      if (b.id === id) return patch;
+      const out: Partial<Band> = {};
+      for (const k of Object.keys(patch) as (keyof Band)[]) {
+        const next = patch[k] as unknown;
+        const was = primary[k] as unknown;
+        if (k === 'fill') {
+          const f = next as Fill;
+          if (f.kind !== primary.fill.kind) {
+            out.fill = b.fill.kind === f.kind ? b.fill : fillFor(f.kind, b);
+            continue;
+          }
+          if (b.fill.kind !== f.kind) continue;
+        }
+        if (next && typeof next === 'object' && !Array.isArray(next) && was && typeof was === 'object') {
+          const changed: Record<string, unknown> = {};
+          for (const [sk, sv] of Object.entries(next)) {
+            if (JSON.stringify(sv) !== JSON.stringify((was as Record<string, unknown>)[sk])) changed[sk] = sv;
+          }
+          if (Object.keys(changed).length) {
+            (out as Record<string, unknown>)[k] = { ...(b[k] as object), ...changed };
+          }
+        } else if (JSON.stringify(next) !== JSON.stringify(was)) {
+          (out as Record<string, unknown>)[k] = next;
+        }
+      }
+      return out;
+    }, key ?? `bands:${ids.join(',')}:${Object.keys(patch).join(',')}`);
+  };
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      if (prop === 'updateBand') return spread;
+      if (prop === 'updateBandField') {
+        return (id: string, field: keyof Band, patch: object, key?: string) => {
+          const b = target.band(id);
+          if (b) spread(id, { [field]: { ...(b[field] as object), ...patch } } as Partial<Band>, key);
+        };
+      }
+      const v = Reflect.get(target, prop, receiver);
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+  });
+}
+
 export function bandEditorPanel(ctx: Ctx): Panel {
   const p = new Panel('Band');
-  const s = ctx.store;
+  const s = fanOut(ctx);
   const band = (): Band | undefined => s.get().bands.find((b) => b.id === ctx.selectedBand());
   const patch = (v: Partial<Band>, key?: string) => {
     const b = band();
@@ -189,7 +386,10 @@ export function bandEditorPanel(ctx: Ctx): Panel {
   p.add(title);
   p.onSync(() => {
     const b = band();
-    title.textContent = b ? b.name : 'No band selected';
+    const ids = ctx.selectedBands();
+    title.textContent = !b ? 'No band selected'
+      : ids.length > 1 ? `${ids.length} bands \u2014 edits apply to all of them; showing ${b.name}`
+        : b.name;
   });
 
   p.add(colourField(p, {
@@ -216,13 +416,7 @@ export function bandEditorPanel(ctx: Ctx): Panel {
     set: (kind) => {
       const b = band();
       if (!b || b.fill.kind === kind) return;
-      const next: Fill =
-        kind === 'hatch' ? { ...HATCH_DEFAULT }
-          : kind === 'stipple' ? { ...STIPPLE_DEFAULT, seed: Math.floor(Math.random() * 1e6) }
-            : kind === 'gradient' ? GRADIENT_DEFAULT(b.colour)
-              : kind === 'freeform' ? defaultFreeform(b.colour)
-                : { kind: 'flat' };
-      s.updateBand(b.id, { fill: next });
+      s.updateBand(b.id, { fill: fillFor(kind as Fill['kind'], b) });
       if (kind === 'freeform') ctx.selectFreePoint(null);
     },
   }));

@@ -45,7 +45,7 @@ export function buildScene(project: Project, derived: Derived): Scene {
         scale: derived.scale,
         band,
       });
-      if (nodes.length) groups.push({ name: band.name, opacity: band.opacity, nodes });
+      if (nodes.length) groups.push({ name: band.name, layer: band.group, opacity: band.opacity, nodes });
     }
   }
 

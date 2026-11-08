@@ -334,6 +334,12 @@ export type Fill = FlatFill | GradientFill | FreeformFill | HatchFill | StippleF
 export type Band = {
   id: string;
   name: string;
+  /**
+   * The group this band belongs to, by name, if any. Grouped bands sit
+   * together in the stack and are written as one layer around their own in the
+   * SVG, so a set of inks — the shadows, the sky — moves and exports as one.
+   */
+  group?: string;
   visible: boolean;
   colour: RGB;
   opacity: number;
@@ -431,6 +437,8 @@ export type SceneNode =
 
 export type SceneGroup = {
   name: string;
+  /** The band's group, which the SVG writes as a layer around its run of bands. */
+  layer?: string;
   opacity: number;
   nodes: SceneNode[];
 };

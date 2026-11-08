@@ -57,6 +57,8 @@ export class App {
   private dropZone!: HTMLElement;
 
   private selected: string | null = null;
+  /** Every selected band; always includes `selected` when there is one. */
+  private selection = new Set<string>();
   private view: 'drawing' | 'photo' | 'split' | 'under' = 'drawing';
   private scene: Scene | null = null;
   /** Where the split view's divider sits, 0..1 across the stage. */
@@ -84,8 +86,31 @@ export class App {
       store: this.store,
       engine: this.engine,
       selectedBand: () => this.selected,
-      selectBand: (id) => {
-        this.selected = id;
+      selectedBands: () => {
+        const bands = this.store.get().bands;
+        const sel = this.selection;
+        if (this.selected) sel.add(this.selected);
+        return bands.filter((b) => sel.has(b.id)).map((b) => b.id);
+      },
+      selectBand: (id, how = 'only') => {
+        const bands = this.store.get().bands;
+        if (how === 'toggle' && this.selection.has(id) && this.selection.size > 1) {
+          this.selection.delete(id);
+          if (this.selected === id) this.selected = [...this.selection][this.selection.size - 1];
+        } else if (how === 'range' && this.selected) {
+          const a = bands.findIndex((b) => b.id === this.selected);
+          const z = bands.findIndex((b) => b.id === id);
+          if (a >= 0 && z >= 0) {
+            for (let i = Math.min(a, z); i <= Math.max(a, z); i++) this.selection.add(bands[i].id);
+          }
+          this.selected = id;
+        } else if (how === 'toggle' || how === 'add') {
+          this.selection.add(id);
+          this.selected = id;
+        } else {
+          this.selection = new Set(id ? [id] : []);
+          this.selected = id;
+        }
         this.syncPanels();
       },
       refresh: () => this.syncPanels(),

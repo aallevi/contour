@@ -13,8 +13,15 @@ import type { FreePoint, GradientStop, Spacing, Source } from '../core/types';
 export type Ctx = {
   store: Store;
   engine: Engine;
+  /** The band the editor shows: the last one clicked. */
   selectedBand(): string | null;
-  selectBand(id: string): void;
+  /**
+   * Every selected band, in stack order, the primary included. Edits made in
+   * the Band panel apply to all of them.
+   */
+  selectedBands(): string[];
+  /** `only` (a plain click), `toggle` (⌘/Ctrl-click) or `range` (Shift-click). */
+  selectBand(id: string, how?: 'only' | 'toggle' | 'range' | 'add'): void;
   /** Re-read every control from the document. */
   refresh(): void;
   status(message: string, kind?: 'info' | 'warn' | 'error'): void;

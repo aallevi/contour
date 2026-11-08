@@ -97,7 +97,8 @@ npm run install-app      # macOS: build and copy into /Applications (add -- --la
    blur away grain before it becomes contours) → *Regions* (tone or colour,
    how many, where they cut) → *Trace* → *Bands* → the selected *Band*'s fill
    and outline. A setting only affects the panels below it, and each panel's
-   (i) explains it.
+   (i) explains it. Shift-click or ⌘-click bands to edit several at once;
+   *Group* keeps bands together as one layer, and *Blend colours* ramps them.
 5. **Take out the background** if you want a cut-out (*Image → Background*):
    *Remove background* finds the subject, *Subject in a box* keeps only what
    is in a box you drag, and *Draw polygon* keeps or cuts away exactly the

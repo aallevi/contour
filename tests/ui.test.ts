@@ -34,6 +34,7 @@ function context(): Ctx {
     engine,
     selectedBand: () => selected,
     selectBand: (id) => { selected = id; },
+    selectedBands: () => (selected ? [selected] : []),
     refresh: () => {},
     status: () => {},
     openImage: async () => {},

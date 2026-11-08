@@ -30,6 +30,8 @@ export enum Dirty {
 const BAND_DIRTY: Record<keyof Band, Dirty> = {
   id: Dirty.None,
   name: Dirty.None,
+  // Grouping changes how the SVG is layered, not what is drawn.
+  group: Dirty.Fill,
   visible: Dirty.Fill,
   colour: Dirty.Fill,
   opacity: Dirty.Fill,
@@ -132,6 +134,25 @@ export class Store {
     if (!band) return;
     const merged = { ...(band[field] as object), ...(patch as object) } as Band[K];
     this.updateBand(id, { [field]: merged } as Partial<Band>, historyKey ?? `band:${id}:${String(field)}`);
+  }
+
+  /**
+   * Patch several bands as one step — a multiple selection edited together.
+   * `fn` gets each band and returns its patch, so a fill setting can be merged
+   * into each band's own fill rather than one band's fill copied onto all.
+   */
+  updateBands(ids: string[], fn: (b: Band) => Partial<Band> | null, historyKey = 'bands:some'): void {
+    const want = new Set(ids);
+    this.commit(historyKey);
+    this.project.bands = this.project.bands.map((b) => {
+      if (!want.has(b.id)) return b;
+      const patch = fn(b);
+      if (!patch) return b;
+      let level = Dirty.None;
+      for (const key of Object.keys(patch) as (keyof Band)[]) level = worst(level, BAND_DIRTY[key] ?? Dirty.Fill);
+      this.markBand(b.id, level);
+      return { ...b, ...patch };
+    });
   }
 
   /** Apply the same patch to every band — "all bands get this hatch angle". */
