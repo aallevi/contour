@@ -20,6 +20,7 @@ import { PRESETS } from './presets';
 import { installTouchSliders } from './controls';
 import { FreeformOverlay } from './overlay';
 import markSvg from '../../assets/brand/mark.svg?raw';
+import { guiColourButton } from './guicolours';
 
 /**
  * The shell.
@@ -170,12 +171,18 @@ export class App {
     // everything that sends work back out grouped on the right. The same order
     // and the same words as Stipple's.
     const bar = el('header', 'toolbar');
-    const brand = el('span', 'brand');
+    // The mark doubles as the way into the interface colours, top left where
+    // a window's own controls would be.
+    const brand = el('button', 'brand');
+    brand.type = 'button';
+    brand.title = 'Interface colours';
+    brand.setAttribute('aria-haspopup', 'dialog');
     const mark = el('span', 'brand-mark');
     mark.setAttribute('aria-hidden', 'true');
     mark.innerHTML = markSvg;
     brand.append(mark, 'Contour');
     bar.append(brand);
+    guiColourButton(brand);
 
     const group = (...nodes: HTMLElement[]): HTMLElement => {
       const g = el('div', 'tool-group');

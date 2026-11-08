@@ -1,5 +1,16 @@
 import './style.css';
 import { App } from './ui/app';
+import { restoreGuiColours } from './ui/guicolours';
+import { marbleTile } from './ui/marble';
+
+// The viewer's own interface colours, on before anything is drawn.
+restoreGuiColours();
+// The marbled ground for a sheet with no paper takes a moment to comb, so it is
+// drawn once the app is up; the plain check stands in until then.
+setTimeout(() => {
+  const tile = marbleTile();
+  if (tile) document.documentElement.style.setProperty('--marble', `url(${tile})`);
+}, 0);
 
 const root = document.getElementById('root');
 if (!root) throw new Error('missing #root');

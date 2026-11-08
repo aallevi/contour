@@ -89,10 +89,17 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  font: inherit;
   font-weight: 700;
   margin-right: 4px;
+  padding: 2px 6px 2px 2px;
   color: var(--text);
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
 }
+.brand:hover { background: var(--hover); border-color: var(--line-soft); }
+.brand.on { background: var(--field); border-color: var(--line); }
 .brand-mark { display: inline-flex; width: 18px; height: 18px; }
 .brand-mark svg { width: 100%; height: 100%; display: block; }
 
@@ -226,9 +233,13 @@ body {
 /* A document with no paper still has to read as a sheet, so the checker is on
    the surface rather than the surface being made see-through — otherwise the
    drawing floats with nothing to say where the page ends. */
+/* The check is combed like marbled paper (ui/marble.ts): two passes of a rake
+   of nails, one down and one across, through a ground of little squares. */
 .surface.transparent {
   background:
-    repeating-conic-gradient(#d8d8d8 0% 25%, #f4f4f4 0% 50%) 0 0 / 16px 16px;
+    repeating-conic-gradient(#d6d6d2 0% 25%, #f6f6f4 0% 50%) 0 0 / 12px 12px;
+  background: var(--marble) 0 0 / 240px 240px repeat,
+    repeating-conic-gradient(#d6d6d2 0% 25%, #f6f6f4 0% 50%) 0 0 / 12px 12px;
 }
 
 .surface > * {
@@ -674,7 +685,7 @@ body {
      rail. Pinning aspect-ratio to 1 here would squash the rail into the plot. */
   height: auto;
   display: block;
-  background: #26332a;
+  background: color-mix(in oklab, var(--stage), #000 50%);
   border: 1px solid var(--line);
   cursor: crosshair;
   touch-action: none;
@@ -1053,7 +1064,7 @@ body {
 /* Quiet, green on green: a backdrop before there is a picture. */
 .drop-zone { position: absolute; inset: 24px; display: grid; place-items: center; border: 1px dashed var(--line-soft); }
 .drop-zone[hidden] { display: none; }
-.drop-zone-inner { text-align: center; color: #d9e4dc; display: grid; gap: 10px; justify-items: center; }
+.drop-zone-inner { text-align: center; color: color-mix(in oklab, var(--panel), #fff 45%); display: grid; gap: 10px; justify-items: center; }
 .drop-zone-title { margin: 0; font-size: 15px; font-weight: 600; }
 .drop-zone-hint { margin: 0; opacity: 0.75; }
 .surface[hidden] { display: none; }
@@ -1082,3 +1093,78 @@ body {
 .paper-swatch::-webkit-color-swatch { border: 0; }
 .paper-row.none .paper-swatch { opacity: 0.25; }
 .paper-row.none .band-name { color: var(--text-dim); }
+
+/* -- interface colours ---------------------------------------------------- */
+
+.gui-colours {
+  position: fixed;
+  z-index: 50;
+  width: 264px;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.gui-colours[hidden] { display: none; }
+.gui-head { display: flex; align-items: center; justify-content: space-between; }
+.gui-title { font-weight: 700; }
+.gui-tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
+.gui-tabs .seg { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.gui-tab-chip { width: 10px; height: 10px; border: 1px solid var(--line); }
+
+/* The little squares, Apple's grid. */
+.gui-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  border: 1px solid var(--line);
+}
+.gui-square {
+  appearance: none;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.gui-square:hover { outline: 2px solid var(--text); outline-offset: -1px; position: relative; z-index: 1; }
+
+.gui-field {
+  position: relative;
+  height: 120px;
+  border: 1px solid var(--line);
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, var(--hue, red));
+}
+.gui-knob {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 2px solid #fff;
+  outline: 1px solid #000;
+  pointer-events: none;
+}
+
+.gui-range { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 6px; }
+.gui-range input { width: 100%; margin: 0; }
+.gui-hue {
+  appearance: none;
+  height: 12px;
+  border: 1px solid var(--line);
+  background: linear-gradient(to right, #f00, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00);
+}
+.gui-hue::-webkit-slider-thumb {
+  appearance: none;
+  width: 6px;
+  height: 14px;
+  background: #fff;
+  border: 1px solid #000;
+}
+.gui-hex-row { display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: center; }
+.gui-swatch { height: 22px; border: 1px solid var(--line); }
+/* No sidebar scrolling to protect inside the popover, so its sliders take the finger. */
+.gui-colours .range { pointer-events: auto; }

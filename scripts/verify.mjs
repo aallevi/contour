@@ -234,6 +234,34 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   await settle(p);
   await p.waitForTimeout(300);
   const picked = await p.evaluate(() => ({ n: window.contour.store.get().bands.length, groups: window.contour.scene().groups.length }));
+  // Interface colours from the mark, and the marbled ground.
+  const gui = await p.evaluate(async () => {
+    const root = () => getComputedStyle(document.documentElement);
+    document.querySelector('.brand').click();
+    const open = !document.querySelector('.gui-colours').hidden;
+    const squares = document.querySelectorAll('.gui-square').length;
+    const before = root().getPropertyValue('--panel').trim();
+    document.querySelectorAll('.gui-square')[60].click();
+    const fill = root().getPropertyValue('--panel').trim();
+    const stage = root().getPropertyValue('--stage').trim();
+    document.querySelectorAll('.gui-tabs .seg')[2].click();
+    document.querySelectorAll('.gui-square')[11].click();
+    const text = root().getPropertyValue('--text').trim();
+    const saved = !!localStorage.getItem('contour.gui-colours');
+    [...document.querySelectorAll('.gui-head .btn')].find((b) => b.textContent === 'Reset').click();
+    const back = root().getPropertyValue('--panel').trim();
+    const cleared = !localStorage.getItem('contour.gui-colours');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    return { open, squares, before, fill, stage, text, saved, back, cleared,
+      marble: root().getPropertyValue('--marble').startsWith('url(data:image/png') };
+  });
+  check(42, 'the mark opens interface colours with a grid of little squares', gui.open && gui.squares >= 100, `${gui.squares} squares`);
+  check(42, 'a fill square recolours the panels and the stage follows', gui.fill !== gui.before && gui.stage.includes('color-mix'), gui.fill);
+  check(42, 'a text square recolours the text, and is remembered', gui.text === '#000000' && gui.saved);
+  check(42, 'Reset puts the workshop green back', gui.back === gui.before && gui.cleared, gui.back);
+  check(43, 'a sheet with no paper shows the marbled check', gui.marble);
+
   check(41, 'a colour picked from the picture becomes a band', picked.n === c1 + 1 && picked.groups === picked.n, `${c1} → ${picked.n} bands, ${picked.groups} drawn`);
   await p.close();
 }
