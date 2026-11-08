@@ -117,7 +117,8 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
     await settle(p);
     const r = await p.evaluate(() => {
       const bands = window.contour.store.get().bands;
-      const shares = [...document.querySelectorAll('.band-meta')].map((m) => parseInt(m.textContent, 10));
+      // The last row is the paper, which a picture drawn whole leaves at 0%.
+      const shares = [...document.querySelectorAll('.band-list .band-meta')].map((m) => parseInt(m.textContent, 10));
       return { groups: window.contour.scene().groups.length, n: bands.length,
         colours: new Set(bands.map((b) => b.colour.join())).size, shares };
     });
@@ -154,10 +155,11 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   await settle(p);
   const plates = await p.evaluate(() => {
     const r = window.contour.plates();
-    return { names: r.files.map((f) => f.name), skipped: r.skipped, groups: window.contour.scene().groups.length,
+    return { names: r.files.map((f) => f.name), skipped: r.skipped, paper: r.paper, groups: window.contour.scene().groups.length,
       firstFilm: r.files[0]?.data ?? '' };
   });
-  check(20, 'one film per band plus a proof', flat && plates.names.length === plates.groups + 1 && plates.names.at(-1).endsWith('proof.svg'), plates.names.join(', '));
+  check(20, 'one film per band plus a proof', flat && plates.names.length === plates.groups - plates.paper.length + 1 && plates.names.at(-1).endsWith('proof.svg'), plates.names.join(', '));
+  check(20, 'the band in the paper’s colour prints as paper, no film', plates.paper.length === 1, plates.paper.join(', '));
   const film = plates.firstFilm;
   const colours = new Set([...film.matchAll(/fill="(#[0-9a-f]{3,6}|rgb\([^)]*\))"/gi)].map((m) => m[1].toLowerCase()));
   check(20, 'films are black on white only', [...colours].every((c) => /^(#000|#000000|#fff|#ffffff|rgb\(0, ?0, ?0\)|rgb\(255, ?255, ?255\))$/.test(c)), [...colours].join(' '));
@@ -171,6 +173,20 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   // 21: band shares.
   const shares = await p.evaluate(() => [...document.querySelectorAll('.band-meta')].map((m) => m.textContent));
   check(21, 'each band shows its share of the sheet', shares.length > 0 && shares.every((s) => /^\d+%$/.test(s)), shares.join(' '));
+
+  // Every level is a band: on black paper the lightest part of the picture is
+  // still painted, and no paper shows anywhere in it.
+  const whole = await p.evaluate(async () => {
+    window.contour.store.updateCanvas({ paper: [0.07, 0.07, 0.08] });
+    await new Promise((r) => setTimeout(r, 400));
+    const s = window.contour.store.get();
+    const rows = [...document.querySelectorAll('.band-list .band-row')].length;
+    return { bands: s.bands.length, levels: s.banding.levels, rows, groups: window.contour.scene().groups.length,
+      paper: document.querySelector('.paper-row .band-meta').textContent };
+  });
+  check(45, 'on black paper the lightest level is still painted', whole.groups === whole.bands && whole.paper === '0%', JSON.stringify(whole));
+  await p.evaluate(() => window.contour.store.updateCanvas({ paper: [1, 1, 1] }));
+  await settle(p);
 
   // 23: the loading bar.
   const bar = await p.evaluate(async () => {

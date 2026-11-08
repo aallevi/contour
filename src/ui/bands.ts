@@ -637,7 +637,7 @@ export function rebuildBands(ctx: Ctx): void {
     : [];
 
   const old = project.bands.filter(isCut);
-  const keptHighlights = project.bands.find((b) => !isCut(b));
+  const keptLightest = project.bands.find((b) => !isCut(b));
   const next: Band[] = [];
   for (let i = 0; i < count; i++) {
     const threshold = thresholds[i] ?? (i + 1) / levels;
@@ -651,68 +651,50 @@ export function rebuildBands(ctx: Ctx): void {
       : fresh);
   }
   s.replaceBands(next, Dirty.Band, 'bands:rebuild');
-  ensureHighlights(ctx, keptHighlights);
-  adoptLightestAsPaper(ctx);
+  ensureLightest(ctx, keptLightest);
   if (!next.some((b) => b.id === ctx.selectedBand())) ctx.selectBand(next[0]?.id ?? '');
 }
 
 /**
- * A cut-out's lightest tones, as a band.
+ * The lightest level, as a band like the others.
  *
- * Without paper the lightest level is the paper, and on a photograph that is
- * right: the sheet shows there. On a cut-out it is wrong — the subject's
- * highlights are part of the subject, and leaving them out punches holes in it
- * wherever the light falls, the background showing through a white shirt. So
- * when the source has a matte the stack gets one more band, Highlights, which
- * takes everything inside the matte that no darker band has (a tone cut at 1,
- * or the lightest palette colour) and leaves only the true background clear.
- * It is an ordinary band — recolour it, hide it, delete it — and it comes back
- * only when the bands are rebuilt.
+ * Every level of the picture is a band; the paper is only what lies behind the
+ * picture — outside a cut-out's matte, or in a gap. The older rule, borrowed
+ * from screen printing, made the lightest level the paper itself, which holds
+ * only while the paper is the lightest colour: choose black or kraft or none
+ * and the sky, the page, the highlights on a face came out as paper or as a
+ * hole. So the stack always ends in one band that cuts at 1 (or holds the
+ * lightest palette colour) and takes whatever no darker band has. The printing
+ * habit survives where it belongs: Plates leaves out a band that is the paper's
+ * colour, since that one prints as bare paper.
+ *
+ * In tone mode it starts as the paper colour, so a drawing on white looks as it
+ * always did; in colour mode it is the picture's own lightest colour.
  */
-export function ensureHighlights(ctx: Ctx, keep?: Band): void {
+export function ensureLightest(ctx: Ctx, keep?: Band): void {
   const s = ctx.store;
   const project = s.get();
-  const cutout = !!ctx.engine.sourceMatte();
-  const has = project.bands.some((b) => !isCut(b));
-  if (cutout === has) return;
-  if (!cutout) {
-    s.replaceBands(project.bands.filter(isCut), Dirty.Band, 'bands:highlights');
-    return;
-  }
+  const tops = project.bands.filter((b) => !isCut(b));
+  if (tops.length === 1 && project.bands[project.bands.length - 1] === tops[0]) return;
+  const cuts = project.bands.filter(isCut);
+  const name = `Level ${cuts.length + 1}`;
   let colour: RGB;
   if (project.banding.mode === 'colour') {
     const palette = ctx.engine.resolvedBanding().palette;
-    colour = palette[project.bands.length] ?? palette[palette.length - 1] ?? [0.95, 0.95, 0.95];
+    colour = palette[cuts.length] ?? palette[palette.length - 1] ?? [0.95, 0.95, 0.95];
+  } else if (project.canvas.paper) {
+    colour = [...project.canvas.paper] as RGB;
   } else {
-    // One more step of the ramp the bands are already on.
-    const n = project.bands.length;
-    const a = project.bands[n - 1]?.colour ?? [0.6, 0.6, 0.6];
-    const b = project.bands[n - 2]?.colour ?? [0.3, 0.3, 0.3];
+    // No paper to match: one more step of the ramp the bands are already on.
+    const a = cuts[cuts.length - 1]?.colour ?? [0.6, 0.6, 0.6];
+    const b = cuts[cuts.length - 2]?.colour ?? [0.3, 0.3, 0.3];
     colour = a.map((v, i) => Math.min(0.97, Math.max(v, v + (v - b[i])))) as RGB;
   }
-  const band: Band = keep
-    ? { ...keep, threshold: 1 }
-    : { ...defaultBand('Highlights', colour, 1), colour, source: colour };
-  s.replaceBands([...project.bands, band], Dirty.Band, 'bands:highlights');
-}
-
-/**
- * Colour mode: the lightest quantised colour becomes the paper.
- *
- * It is the level the bands are printed on, exactly as in tone mode, and a
- * photograph quantised to six colours whose lightest is a warm cream should not
- * come out on a white ground with the cream missing entirely.
- */
-function adoptLightestAsPaper(ctx: Ctx): void {
-  const project = ctx.store.get();
-  if (project.banding.mode !== 'colour') return;
-  // No paper is a decision, not a missing colour. Someone who opened a cut-out
-  // and switched to colour regions should not find the ground they were keeping
-  // clear filled in with whatever the quantiser called lightest.
-  if (project.canvas.paper === null) return;
-  const palette = ctx.engine.resolvedBanding().palette;
-  const lightest = palette[palette.length - 1];
-  if (lightest) ctx.store.updateCanvas({ paper: lightest }, 'canvas:paper');
+  const prev = keep ?? tops[0];
+  const band: Band = prev
+    ? { ...prev, name: /^Level \d+$|^Highlights$/.test(prev.name) ? name : prev.name, threshold: 1 }
+    : { ...defaultBand(name, colour, 1), colour, source: colour };
+  s.replaceBands([...cuts, band], Dirty.Band, 'bands:lightest');
 }
 
 /** Colour mode: push the resolved palette onto the bands' own colours. */
@@ -726,7 +708,6 @@ export function takePaletteIntoBands(ctx: Ctx): void {
     colour: palette[i] ?? b.colour,
   }));
   s.replaceBands(next, Dirty.Fill, 'bands:palette');
-  adoptLightestAsPaper(ctx);
 }
 
 /**
@@ -803,7 +784,7 @@ export function thresholdsFor(
       : balancedThresholds(hist, levels);
 }
 
-/** The bands that cut at a tone, as opposed to a cut-out's Highlights band. */
+/** The bands that cut at a tone, as opposed to the lightest band, which takes the rest. */
 const isCut = (b: Band): boolean => b.threshold < 1;
 
 /** Apply a spacing rule to the bands that exist now. */
@@ -813,8 +794,8 @@ export function respace(ctx: Ctx, rule?: Exclude<Spacing, 'manual'>): void {
   if (project.banding.mode !== 'tone' || project.bands.length === 0) return;
 
   const spacing = rule ?? (project.banding.spacing === 'manual' ? 'balanced' : project.banding.spacing);
-  // The lightest level is the paper (or a cut-out's Highlights band, which
-  // takes everything left), so N cutting bands means N + 1 levels.
+  // The lightest band takes everything left and has no cut of its own, so N
+  // cutting bands means N + 1 levels.
   const cuts = project.bands.filter(isCut).length;
   const thresholds = thresholdsFor(spacing, ctx.engine.histogram(), cuts + 1);
   let k = 0;

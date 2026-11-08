@@ -58,7 +58,14 @@ describe('plates', () => {
   };
 
   it('plans a film per one-ink band and names the rest', () => {
-    expect(planPlates(scene)).toEqual({ films: ['Light', 'Dark'], skipped: ['Ramp'] });
+    expect(planPlates(scene)).toEqual({ films: ['Light', 'Dark'], skipped: ['Ramp'], paper: [] });
+  });
+
+  it('gives no film to a band in the paper’s own colour', () => {
+    const onPaper = { ...scene, background: scene.groups[0].nodes[0].kind === 'fill' && scene.groups[0].nodes[0].paint.kind === 'solid' ? scene.groups[0].nodes[0].paint.rgb : null };
+    const plan = planPlates(onPaper as typeof scene);
+    expect(plan.paper).toEqual(['Light']);
+    expect(plan.films).toEqual(['Dark']);
   });
 
   it('paints its own band black and knocks out the opaque bands painted over it', () => {

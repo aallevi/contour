@@ -367,12 +367,13 @@ export function regionsPanel(ctx: Ctx): Panel {
       s.updateBanding({ levels }, 'banding:levels');
       ctx.rebuildBands();
     },
-    hint: () => `${Math.max(1, b().levels - 1)} band${b().levels === 2 ? '' : 's'} of ink on paper`,
+    hint: () => `${b().levels} bands, the lightest included`,
   }));
 
   p.add(help(
-    'The lightest level is the paper, not a band — so four levels is three ' +
-    'inks printed on a ground, which is the same arithmetic a screen printer does.',
+    'Every level is a band, the lightest included, so the picture is drawn ' +
+    'whole on any paper — black, kraft or none. A band the colour of the paper ' +
+    'is left out of Plates, since it prints as the bare sheet.',
   ));
 
   const toneBox = el('div', 'subgroup');
@@ -394,7 +395,7 @@ export function regionsPanel(ctx: Ctx): Panel {
     },
   }));
   toneBox.append(thresholdStrip(p, {
-    // A cut-out's Highlights band cuts at 1 and has no divider to drag.
+    // The lightest band cuts at 1 and has no divider to drag.
     get: () => ctx.engine.resolvedBanding().thresholds.filter((t) => t < 1),
     set: (thresholds) => {
       let k = 0;
@@ -408,9 +409,8 @@ export function regionsPanel(ctx: Ctx): Panel {
     colours: () => {
       const bands = s.get().bands;
       // Bands are ordered dark to light and the strip runs the same way; the
-      // paper colour closes it off at the light end.
-      const cols = bands.filter((band) => band.threshold < 1).map((band) => rgbToHex(band.colour));
-      cols.push(rgbToHex(s.get().canvas.paper ?? [1, 1, 1]));
+      // lightest band closes it off at the light end.
+      const cols = bands.map((band) => rgbToHex(band.colour));
       return cols;
     },
     enabled: () => true,

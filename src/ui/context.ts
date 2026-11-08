@@ -33,8 +33,8 @@ export type Ctx = {
    * band's fill, shaping and opacity where one is still there to keep.
    */
   rebuildBands(): void;
-  /** A cut-out gets a Highlights band; anything else loses it. */
-  ensureHighlights(): void;
+  /** End the stack in the band for the lightest level (see bands.ts). */
+  ensureLightest(): void;
   /** Colour mode: copy the resolved palette onto the bands. */
   takePaletteIntoBands(): void;
   /**

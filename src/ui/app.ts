@@ -13,7 +13,7 @@ import { imageExtensions, isTauri, openFile, saveFile, saveFiles } from '../plat
 import { button, el, onResize, Panel } from './controls';
 import type { Ctx } from './context';
 import {
-  bandEditorPanel, bandsPanel, ensureHighlights, needsRespace, rebuildBands, respace, takePaletteIntoBands,
+  bandEditorPanel, bandsPanel, ensureLightest, needsRespace, rebuildBands, respace, takePaletteIntoBands,
 } from './bands';
 import { documentPanel, imagePanel, regionsPanel, tracePanel } from './panels';
 import { PRESETS } from './presets';
@@ -94,7 +94,7 @@ export class App {
       pickColour: (done) => this.startPicking(done),
       afterTrace: (fn) => { this.afterTraceQueue.push(fn); },
       rebuildBands: () => rebuildBands(this.ctx),
-      ensureHighlights: () => ensureHighlights(this.ctx),
+      ensureLightest: () => ensureLightest(this.ctx),
       takePaletteIntoBands: () => takePaletteIntoBands(this.ctx),
       respace: (rule) => respace(this.ctx, rule),
       sampleGradient: (bandId) =>
@@ -598,8 +598,8 @@ export class App {
       // source of truth; the guard means it costs a second pass only when the
       // first one actually landed somewhere else.
       if (change.global >= Dirty.All) {
-        // A new source may have brought a matte, or taken one away.
-        ensureHighlights(this.ctx);
+        // A document from an older build may end without its lightest band.
+        ensureLightest(this.ctx);
         if (needsRespace(this.ctx)) respace(this.ctx);
       }
 
@@ -848,10 +848,11 @@ export class App {
       this.setStatus('No band is a single ink, so there is nothing to make a film of', 'warn');
       return;
     }
-    const { files, skipped } = exportPlates(this.scene);
+    const { files, skipped, paper } = exportPlates(this.scene);
     const res = await saveFiles(files);
     if (res.dir === null) return;
-    const left = skipped.length ? ` \u2014 left out, not one ink: ${skipped.join(', ')}` : '';
+    const bare = paper.length ? ` \u2014 ${paper.join(', ')} prints as the paper` : '';
+    const left = (skipped.length ? ` \u2014 left out, not one ink: ${skipped.join(', ')}` : '') + bare;
     const failed = res.failed.length ? ` \u2014 ${res.failed.length} could not be written` : '';
     this.setStatus(`Exported ${files.length - 1} plates and a proof${left}${failed}`, skipped.length || failed ? 'warn' : 'info');
   }

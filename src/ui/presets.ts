@@ -21,7 +21,7 @@ const tone = (ctx: Ctx, levels: number, bands: Band[], adjust: Partial<ReturnTyp
   s.updateBanding({ mode: 'tone', levels, spacing: 'balanced', nested: true });
   s.updateTrace(defaultTrace());
   s.replaceBands(bands);
-  ctx.ensureHighlights();
+  ctx.ensureLightest();
 };
 
 const colour = (ctx: Ctx, levels: number, adjust: Partial<ReturnType<typeof defaultAdjust>>, after?: (b: Band[]) => void): void => {

@@ -23,10 +23,20 @@ import { exportSVG } from './svg';
 const BLACK: RGB = [0, 0, 0];
 const WHITE: RGB = [1, 1, 1];
 
-export type PlatePlan = { films: string[]; skipped: string[] };
+export type PlatePlan = { films: string[]; skipped: string[]; paper: string[] };
 
 const isOneInk = (g: SceneGroup): boolean =>
   g.nodes.every((n) => n.kind === 'stroke' || n.paint.kind === 'solid');
+
+/**
+ * A one-ink band in the paper's own colour prints as the bare sheet — the
+ * screen printer's lightest level — so it needs no film.
+ */
+const isPaper = (g: SceneGroup, paper: RGB | null): boolean =>
+  !!paper && g.nodes.length > 0 && g.nodes.every((n) => {
+    const rgb = n.kind === 'stroke' ? n.rgb : n.paint.kind === 'solid' ? n.paint.rgb : null;
+    return !!rgb && n.opacity >= 0.999 && rgb.every((v, i) => Math.abs(v - paper[i]) < 0.02);
+  });
 
 const isOpaque = (n: SceneNode): boolean =>
   n.kind === 'fill' && n.paint.kind === 'solid' && n.opacity >= 0.999;
@@ -37,8 +47,12 @@ const recolour = (n: SceneNode, rgb: RGB): SceneNode =>
 export function planPlates(scene: Scene): PlatePlan {
   const films: string[] = [];
   const skipped: string[] = [];
-  for (const g of scene.groups) (isOneInk(g) ? films : skipped).push(g.name);
-  return { films, skipped };
+  const paper: string[] = [];
+  for (const g of scene.groups) {
+    if (isPaper(g, scene.background)) paper.push(g.name);
+    else (isOneInk(g) ? films : skipped).push(g.name);
+  }
+  return { films, skipped, paper };
 }
 
 /** The scene as the film for group `index` in paint order. */
@@ -88,10 +102,18 @@ function onSheet(scene: Scene, label: string): string {
 const slug = (s: string): string => s.replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'band';
 
 /** Every film and the colour proof, ready to write. */
-export function exportPlates(scene: Scene, base = 'drawing'): { files: { name: string; data: string }[]; skipped: string[] } {
+export function exportPlates(
+  scene: Scene,
+  base = 'drawing',
+): { files: { name: string; data: string }[]; skipped: string[]; paper: string[] } {
   const files: { name: string; data: string }[] = [];
   const skipped: string[] = [];
+  const paper: string[] = [];
   scene.groups.forEach((g, i) => {
+    if (isPaper(g, scene.background)) {
+      paper.push(g.name);
+      return;
+    }
     if (!isOneInk(g)) {
       skipped.push(g.name);
       return;
@@ -100,5 +122,5 @@ export function exportPlates(scene: Scene, base = 'drawing'): { files: { name: s
     files.push({ name: `${base}-plate-${n}-${slug(g.name)}.svg`, data: onSheet(filmScene(scene, i), `${n} ${g.name}`) });
   });
   files.push({ name: `${base}-proof.svg`, data: onSheet(scene, 'Proof') });
-  return { files, skipped };
+  return { files, skipped, paper };
 }
