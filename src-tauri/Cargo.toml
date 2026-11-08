@@ -1,0 +1,36 @@
+[package]
+name = "contour"
+version = "0.1.0"
+description = "Posterise and trace photographs into vector illustrations"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "contour_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Only the formats browsers cannot decode themselves are worth pulling in;
+# anything more exotic goes through ImageMagick.
+image = { version = "0.25", default-features = false, features = ["tiff", "png", "jpeg", "bmp", "webp"] }
+# The second tracer, linked in rather than installed, so the app can trace out
+# of the box. `visioncortex` is a direct dependency only because vtracer's
+# `Config.mode` is one of its types and vtracer does not re-export it — it must
+# stay on the same minor version, or the tree holds two incompatible copies.
+vtracer = "0.6.5"
+visioncortex = "0.8"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

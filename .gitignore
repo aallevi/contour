@@ -1,0 +1,12 @@
+/node_modules/
+/dist/
+/src-tauri/target/
+/src-tauri/gen/
+.DS_Store
+*.local
+
+# The end-to-end test's source picture and everything it writes. Kept out of
+# the repository: the outputs are rewritten on every run, and the picture is
+# not ours to publish. The test skips itself when it is missing.
+/artifacts/
+/.attic/
