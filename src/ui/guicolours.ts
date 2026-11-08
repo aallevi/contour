@@ -136,25 +136,27 @@ export function restoreGuiColours(): void {
 }
 
 /**
- * What a sheet with no paper shows behind the drawing: the marbled check, or
- * the plain one every other program uses. A viewing preference, like the
- * colours, and never part of a document.
+ * The stage's ground, which is what shows through a sheet with no paper: the
+ * faint cutting-mat grid, a check of squares, or the squares combed like
+ * marbled paper. A viewing preference, like the colours, and never part of a
+ * document.
  */
-export type Ground = 'marbled' | 'check';
+export type Ground = 'grid' | 'squares' | 'marbled';
 const GROUND_KEY = 'contour.ground';
 
 function loadGround(): Ground {
   try {
-    return localStorage.getItem(GROUND_KEY) === 'check' ? 'check' : 'marbled';
+    const g = localStorage.getItem(GROUND_KEY);
+    return g === 'squares' || g === 'check' ? 'squares' : g === 'marbled' ? 'marbled' : 'grid';
   } catch {
-    return 'marbled';
+    return 'grid';
   }
 }
 
 function applyGround(g: Ground): void {
   document.documentElement.dataset.ground = g;
   try {
-    if (g === 'marbled') localStorage.removeItem(GROUND_KEY);
+    if (g === 'grid') localStorage.removeItem(GROUND_KEY);
     else localStorage.setItem(GROUND_KEY, g);
   } catch { /* lasts as long as the page */ }
 }
@@ -324,11 +326,12 @@ export function guiColourButton(trigger: HTMLElement): void {
 
   const groundRow = el('div', 'gui-ground');
   const groundLabel = el('span', 'gui-range-label');
-  groundLabel.textContent = 'Clear paper';
+  groundLabel.textContent = 'Background';
   const groundSeg = el('div', 'segmented');
   const grounds: { value: Ground; label: string; title: string }[] = [
+    { value: 'grid', label: 'Grid', title: 'Faint ruled lines, like a cutting mat' },
+    { value: 'squares', label: 'Squares', title: 'A check of squares' },
     { value: 'marbled', label: 'Marbled', title: 'Little squares combed like marbled paper' },
-    { value: 'check', label: 'Check', title: 'The plain check grid' },
   ];
   const groundButtons = grounds.map((g) => {
     const b = el('button', 'seg');
@@ -345,7 +348,7 @@ export function guiColourButton(trigger: HTMLElement): void {
   document.body.append(pop);
 
   reset.addEventListener('click', () => {
-    applyGround('marbled');
+    applyGround('grid');
     choices = {};
     save(choices);
     applyGuiColours(choices);
@@ -382,9 +385,9 @@ export function guiColourButton(trigger: HTMLElement): void {
     specKnob.style.left = `${(p.h / 360) * 100}%`;
     specKnob.style.top = `${(p.v >= 0.999 ? p.s / 2 : 1 - p.v / 2) * 100}%`;
     resetOne.disabled = !choices[target];
-    const ground = document.documentElement.dataset.ground ?? 'marbled';
+    const ground = document.documentElement.dataset.ground ?? 'grid';
     for (const { b, g } of groundButtons) b.classList.toggle('on', g.value === ground);
-    reset.disabled = !Object.keys(choices).length && ground === 'marbled';
+    reset.disabled = !Object.keys(choices).length && ground === 'grid';
   }
 
   const place = () => {

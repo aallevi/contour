@@ -200,6 +200,18 @@ body {
     linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 32px 32px,
     var(--stage);
   cursor: grab;
+}
+
+/* The other grounds, chosen from the Contour popover. Both are drawn as light
+   over the stage colour, so they follow any interface colour; they sit behind
+   a sheet with no paper, so that is where they show through. */
+:root[data-ground="squares"] .stage {
+  background:
+    repeating-conic-gradient(rgba(255, 255, 255, 0.08) 0 25%, transparent 0 50%) 0 0 / 16px 16px,
+    var(--stage);
+}
+:root[data-ground="marbled"] .stage {
+  background: var(--marble) 0 0 / 240px 240px repeat, var(--stage);
   touch-action: none;
 }
 
@@ -233,16 +245,12 @@ body {
 /* A document with no paper still has to read as a sheet, so the checker is on
    the surface rather than the surface being made see-through — otherwise the
    drawing floats with nothing to say where the page ends. */
-/* The check is combed like marbled paper (ui/marble.ts): two passes of a rake
-   of nails, one down and one across, through a ground of little squares. */
+/* No paper means no paper: the sheet is see-through and the stage shows
+   behind the drawing, with a thin line a shade off the stage marking where the
+   page ends. */
 .surface.transparent {
-  background:
-    repeating-conic-gradient(#d6d6d2 0% 25%, #f6f6f4 0% 50%) 0 0 / 12px 12px;
-  background: var(--marble) 0 0 / 240px 240px repeat,
-    repeating-conic-gradient(#d6d6d2 0% 25%, #f6f6f4 0% 50%) 0 0 / 12px 12px;
-}
-:root[data-ground="check"] .surface.transparent {
-  background: repeating-conic-gradient(#d8d8d8 0% 25%, #f4f4f4 0% 50%) 0 0 / 16px 16px;
+  background: transparent;
+  outline: 1px solid color-mix(in oklab, var(--stage), #fff 42%);
 }
 
 .surface > * {
@@ -1172,7 +1180,7 @@ body {
 /* No sidebar scrolling to protect inside the popover, so its sliders take the finger. */
 .gui-colours .range { pointer-events: auto; }
 .gui-ground { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 6px; }
-.gui-ground .segmented { display: grid; grid-template-columns: 1fr 1fr; }
+.gui-ground .segmented { display: grid; grid-template-columns: repeat(3, 1fr); }
 
 .gui-views { display: grid; grid-template-columns: 1fr 1fr; }
 .gui-grid[hidden], .gui-spectrum[hidden] { display: none; }

@@ -1,6 +1,6 @@
 /**
- * The ground shown behind a drawing with no paper: a check of little squares,
- * combed like marbled paper.
+ * One of the stage's grounds, seen through a sheet with no paper: a check of
+ * little squares, combed like marbled paper.
  *
  * A marbler draws a rake of nails through the floating colour once one way and
  * once across, and the check here is put through the same two passes. Each nail
@@ -62,8 +62,9 @@ export function marbleTile(): string | null {
   const g = canvas.getContext('2d');
   if (!g) return null;
   const img = g.createImageData(N, N);
-  const light = [246, 246, 244];
-  const dark = [214, 214, 210];
+  // Drawn as white over clear, so the stage colour underneath is the ground
+  // and the squares are a lighter shade of whatever it is.
+  const ink = 0.09;
   // Four samples a pixel, so the combed edges come out smooth.
   const offs = [0.25, 0.75];
   for (let y = 0; y < N; y++) {
@@ -72,8 +73,8 @@ export function marbleTile(): string | null {
       for (const oy of offs) for (const ox of offs) t += sample(x + ox, y + oy);
       t /= 4;
       const i = (y * N + x) * 4;
-      for (let c = 0; c < 3; c++) img.data[i + c] = Math.round(light[c] + (dark[c] - light[c]) * t);
-      img.data[i + 3] = 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(255 * ink * t);
     }
   }
   g.putImageData(img, 0, 0);

@@ -5,8 +5,8 @@ import { marbleTile } from './ui/marble';
 
 // The viewer's own interface colours, on before anything is drawn.
 restoreGuiColours();
-// The marbled ground for a sheet with no paper takes a moment to comb, so it is
-// drawn once the app is up; the plain check stands in until then.
+// The marbled ground for the stage takes a moment to comb, so it is
+// drawn once the app is up; the plain stage colour stands in until then.
 setTimeout(() => {
   const tile = marbleTile();
   if (tile) document.documentElement.style.setProperty('--marble', `url(${tile})`);

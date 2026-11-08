@@ -252,15 +252,22 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
     const back = root().getPropertyValue('--panel').trim();
     const cleared = !localStorage.getItem('contour.gui-colours');
     const segs = [...document.querySelectorAll('.gui-ground .seg')];
-    segs.find((b) => b.textContent === 'Check').click();
+    const stageEl = document.querySelector('.stage');
     const surface = document.querySelector('.surface');
+    const bgOf = (label) => { segs.find((b) => b.textContent === label).click(); return getComputedStyle(stageEl).backgroundImage; };
+    const squaresBg = bgOf('Squares');
+    const squaresSaved = localStorage.getItem('contour.ground') === 'squares';
+    const marbledBg = bgOf('Marbled');
+    const gridBg = bgOf('Grid');
+    const hadClass = surface.classList.contains('transparent');
     surface.classList.add('transparent');
-    const checkBg = getComputedStyle(surface).backgroundImage;
-    const checkSaved = localStorage.getItem('contour.ground') === 'check';
-    segs.find((b) => b.textContent === 'Marbled').click();
-    const marbleBg = getComputedStyle(surface).backgroundImage;
-    surface.classList.toggle('transparent', window.contour.store.get().canvas.paper === null);
-    var ground = { check: checkSaved && !checkBg.includes('url(') && checkBg.includes('conic'), marbled: marbleBg.includes('url(') };
+    const sheet = getComputedStyle(surface);
+    const clear = { bg: sheet.backgroundColor, outline: sheet.outlineStyle + ' ' + sheet.outlineWidth };
+    surface.classList.toggle('transparent', hadClass);
+    var ground = {
+      squares: squaresSaved && squaresBg.includes('conic'), marbled: marbledBg.includes('url('),
+      grid: gridBg.includes('linear-gradient') && !localStorage.getItem('contour.ground'), clear,
+    };
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     return { ground, open, squares, before, fill, stage, text, saved, back, cleared,
@@ -270,8 +277,8 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   check(42, 'a fill square recolours the panels and the stage follows', gui.fill !== gui.before && gui.stage.includes('color-mix'), gui.fill);
   check(42, 'a text square recolours the text, and is remembered', gui.text === '#000000' && gui.saved);
   check(42, 'Reset puts the workshop green back', gui.back === gui.before && gui.cleared, gui.back);
-  check(43, 'a sheet with no paper shows the marbled check', gui.marble);
-  check(43, 'Clear paper switches to the plain check and back', gui.ground.check && gui.ground.marbled);
+  check(43, 'Background: Grid, Squares and Marbled on the stage, remembered', gui.ground.grid && gui.ground.squares && gui.ground.marbled && gui.marble);
+  check(43, 'no paper: the sheet is see-through with a thin edge line', gui.ground.clear.bg === 'rgba(0, 0, 0, 0)' && gui.ground.clear.outline === 'solid 1px', JSON.stringify(gui.ground.clear));
 
   // Dragging a 2D slider out across the page selects nothing; Spectrum picks.
   await p.click('.brand');
