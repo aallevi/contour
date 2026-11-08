@@ -141,6 +141,7 @@ export class App {
     if (!import.meta.env.DEV) return;
     (window as unknown as { contour: unknown }).contour = {
       store: this.store,
+      ctx: this.ctx,
       scene: () => this.scene,
       applyPreset: (name: string) => {
         const p = PRESETS.find((x) => x.name === name);

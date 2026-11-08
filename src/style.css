@@ -1062,3 +1062,23 @@ body {
   .export-select { display: block; width: 108px; font-size: 16px; }
   .export-buttons { display: none; }
 }
+
+/* -- paper ---------------------------------------------------------------- */
+
+.paper-choices { display: grid; grid-template-columns: repeat(3, 1fr); margin: 4px 0; }
+.paper-choices .seg:nth-child(3n) { border-right: 0; }
+.paper-choices .seg:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+.paper-choices .seg { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.paper-chip {
+  width: 11px; height: 11px; border: 1px solid var(--line); flex: 0 0 auto;
+}
+.paper-chip.none {
+  background: repeating-conic-gradient(#fff 0 25%, #c9c9c9 0 50%) 0 0 / 6px 6px;
+}
+.paper-row { cursor: default; border: 1px solid var(--line); border-top: 0; margin-top: -4px; }
+.paper-row:hover { background: var(--panel-3); }
+.paper-swatch { padding: 0; cursor: pointer; appearance: none; -webkit-appearance: none; }
+.paper-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.paper-swatch::-webkit-color-swatch { border: 0; }
+.paper-row.none .paper-swatch { opacity: 0.25; }
+.paper-row.none .band-name { color: var(--text-dim); }

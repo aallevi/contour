@@ -1,4 +1,5 @@
-import { contrastInk, cssRgb, rgbToHex } from '../core/color';
+import { contrastInk, cssRgb, hexToRgb, lumaOf, rgbToHex } from '../core/color';
+import { paperChoices } from './panels';
 import { defaultBand, defaultFreeform, defaultGradient, gradientRamp, ID } from '../core/defaults';
 import { Dirty } from '../core/store';
 import { equalAreaThresholds, evenThresholds } from '../band/posterize';
@@ -24,9 +25,28 @@ export function bandsPanel(ctx: Ctx): Panel {
   const p = new Panel('Bands');
   const list = el('div', 'band-list');
   p.body.append(list);
-  const paperNote = el('p', 'note');
-  p.body.append(paperNote);
+  // The paper is the bottom layer of every drawing, so it sits at the foot of
+  // the stack as one: a colour you can change here, or None.
+  const paperRow = el('div', 'band-row paper-row');
+  const paperSwatch = el('input', 'band-swatch paper-swatch');
+  paperSwatch.type = 'color';
+  paperSwatch.title = 'Paper colour';
+  paperSwatch.addEventListener('input', () =>
+    ctx.store.updateCanvas({ paper: hexToRgb(paperSwatch.value) }, 'canvas:paper'));
+  const paperName = el('span', 'band-name');
+  const paperNote = el('span', 'band-meta');
+  paperRow.append(el('span', 'band-eye'), paperSwatch, paperName, paperNote);
+  list.after(paperRow);
+  p.body.append(paperChoices(ctx));
 
+  p.add(buttonRow(
+    button('+ Add band', () => addBand(ctx), {
+      title: 'One more region: another tone step, or another colour solved from the picture',
+    }),
+    button('+ Add colour from picture', () => ctx.pickColour((rgb) => addPickedColour(ctx, rgb)), {
+      title: 'Click the picture: that colour becomes a band of its own',
+    }),
+  ));
   p.add(buttonRow(
     button('Duplicate', () => {
       const id = ctx.selectedBand();
@@ -55,9 +75,12 @@ export function bandsPanel(ctx: Ctx): Panel {
     const selected = ctx.selectedBand();
     list.replaceChildren();
     const shares = ctx.engine.bandShares(project as Project);
-    paperNote.textContent = shares.shares.size
-      ? `Paper ${Math.round(shares.paper * 100)}% of the sheet`
-      : '';
+    const paper = project.canvas.paper;
+    paperRow.classList.toggle('none', paper === null);
+    paperSwatch.value = rgbToHex(paper ?? [1, 1, 1]);
+    paperName.textContent = paper === null ? 'Paper: none (transparent)' : 'Paper';
+    paperNote.textContent = shares.shares.size ? `${Math.round(shares.paper * 100)}%` : '';
+    paperNote.title = 'Share of the sheet where the paper shows';
 
     project.bands.forEach((band, index) => {
       const row = el('div', 'band-row');
@@ -662,6 +685,66 @@ export function takePaletteIntoBands(ctx: Ctx): void {
   }));
   s.replaceBands(next, Dirty.Fill, 'bands:palette');
   adoptLightestAsPaper(ctx);
+}
+
+/**
+ * One more band. In tone mode that is one more level, re-spaced by the rule in
+ * force; in colour mode one more colour, solved around the pinned ones once the
+ * trace it sets off has landed.
+ */
+export function addBand(ctx: Ctx): void {
+  const s = ctx.store;
+  const { banding } = s.get();
+  if (banding.levels >= 16) {
+    ctx.status('Sixteen levels is the most there can be', 'warn');
+    return;
+  }
+  const levels = banding.levels + 1;
+  if (banding.mode === 'tone') {
+    s.updateBanding({ levels, spacing: banding.spacing === 'manual' ? 'equal-area' : banding.spacing }, 'banding:levels');
+    rebuildBands(ctx);
+    return;
+  }
+  const keep = banding.palette.filter((_, i) => banding.locked[i]);
+  s.updateBanding({ levels, palette: keep, locked: keep.map(() => true) }, 'banding:levels');
+  ctx.afterTrace(() => { rebuildBands(ctx); takePaletteIntoBands(ctx); });
+}
+
+/**
+ * A colour taken from the picture, as a band of its own.
+ *
+ * Colour mode: it joins the palette pinned, and the solver fits the others
+ * round it. Tone mode: a new cut at the picked colour's tone, painted in that
+ * colour, slotted into the stack where its tone puts it.
+ */
+export function addPickedColour(ctx: Ctx, rgb: RGB): void {
+  const s = ctx.store;
+  const project = s.get();
+  const { banding } = project;
+  if (banding.levels >= 16) {
+    ctx.status('Sixteen levels is the most there can be', 'warn');
+    return;
+  }
+  if (banding.mode === 'colour') {
+    const keep = banding.palette.filter((_, i) => banding.locked[i]);
+    const palette = [...keep, rgb].sort((a, b) => lumaOf(a) - lumaOf(b));
+    s.updateBanding({ levels: banding.levels + 1, palette, locked: palette.map(() => true) }, 'banding:pick');
+    ctx.afterTrace(() => {
+      rebuildBands(ctx);
+      takePaletteIntoBands(ctx);
+      const added = s.get().bands.find((b) => rgbToHex(b.colour) === rgbToHex(rgb));
+      if (added) ctx.selectBand(added.id);
+    });
+    ctx.status(`Added ${rgbToHex(rgb)} as a band`);
+    return;
+  }
+  const threshold = Math.min(0.99, Math.max(0.01, lumaOf(rgb) + 0.02));
+  const band = { ...defaultBand('Picked', rgb, threshold), colour: rgb };
+  const bands = [...project.bands, band].sort((a, b) => a.threshold - b.threshold);
+  s.updateBanding({ levels: bands.length + 1, spacing: 'manual', thresholds: bands.map((b) => b.threshold) }, 'banding:pick');
+  s.replaceBands(bands, Dirty.Band, 'band:add');
+  ctx.selectBand(band.id);
+  ctx.status(`Added ${rgbToHex(rgb)} as a band at tone ${threshold.toFixed(2)}`);
 }
 
 /**

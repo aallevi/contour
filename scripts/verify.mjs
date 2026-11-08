@@ -180,6 +180,61 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   });
   check(23, 'a bar is up while tracing', bar);
   await settle(p);
+
+  // Paper and colour layers, one click each.
+  const clickSeg = (label) => p.evaluate((label) => {
+    const seg = [...document.querySelectorAll('.paper-choices .seg')].find((b) => b.textContent === label && b.offsetParent);
+    seg.click();
+  }, label);
+  await p.evaluate(() => { window.contour.store.updateBanding({ mode: 'tone', levels: 4 }); window.contour.ctx.rebuildBands(); });
+  await settle(p);
+  await clickSeg('None');
+  await settle(p);
+  const none = await p.evaluate(() => window.contour.store.get().canvas.paper === null);
+  await clickSeg('White');
+  await settle(p);
+  await p.waitForTimeout(150);
+  const white = await p.evaluate(() => JSON.stringify(window.contour.store.get().canvas.paper) === '[1,1,1]'
+    && [...document.querySelectorAll('.paper-choices .seg.on')].every((b) => b.textContent === 'White'));
+  const dbg = await p.evaluate(() => JSON.stringify(window.contour.store.get().canvas.paper) + ' on:' + [...document.querySelectorAll('.paper-choices .seg.on')].map((b) => b.textContent).join(','));
+  check(40, 'None then White: back on white paper in one click', none && white, `${none} ${dbg}`);
+  await clickSeg('Kraft');
+  const svgPaper = await p.evaluate(() => !!document.querySelector('.surface svg rect[fill="#c7a880"], .surface svg rect[fill="rgb(199,168,128)"]') || window.contour.store.get().canvas.paper[0] < 0.8);
+  check(40, 'a stock colour paints the paper', svgPaper);
+
+  const addClick = (label) => p.evaluate((label) => {
+    [...document.querySelectorAll('button')].find((b) => b.textContent === label).click();
+  }, label);
+  await p.evaluate(() => window.contour.store.updateBanding({ mode: 'tone', levels: 4 }));
+  await p.evaluate(() => window.contour.ctx.rebuildBands());
+  await settle(p);
+  const n0 = await p.evaluate(() => window.contour.store.get().bands.length);
+  await addClick('+ Add band');
+  await settle(p);
+  const n1 = await p.evaluate(() => window.contour.store.get().bands.length);
+  check(41, '+ Add band adds a tone band', n1 === n0 + 1, `${n0} → ${n1}`);
+
+  await p.evaluate(() => { window.contour.store.updateBanding({ mode: 'colour', levels: 4, palette: [], locked: [] }); window.contour.ctx.rebuildBands(); });
+  await settle(p);
+  await p.waitForTimeout(300);
+  await settle(p);
+  const c0 = await p.evaluate(() => window.contour.store.get().bands.length);
+  await addClick('+ Add band');
+  await p.waitForTimeout(300);
+  await settle(p);
+  await p.waitForTimeout(300);
+  const c1 = await p.evaluate(() => window.contour.store.get().bands.length);
+  check(41, '+ Add band adds a colour band', c1 === c0 + 1, `${c0} → ${c1}`);
+
+  // Pick a colour from the middle of the picture into its own band.
+  await addClick('+ Add colour from picture');
+  const box = await p.locator('.stage').boundingBox();
+  await p.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.5);
+  await p.waitForTimeout(300);
+  await settle(p);
+  await p.waitForTimeout(300);
+  const picked = await p.evaluate(() => ({ n: window.contour.store.get().bands.length, groups: window.contour.scene().groups.length }));
+  check(41, 'a colour picked from the picture becomes a band', picked.n === c1 + 1 && picked.groups === picked.n, `${c1} → ${picked.n} bands, ${picked.groups} drawn`);
   await p.close();
 }
 

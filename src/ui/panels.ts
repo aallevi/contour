@@ -2,7 +2,7 @@ import { hexToRgb, lumaOf, rgbToHex } from '../core/color';
 import { nearestPaletteIndex } from '../band/quantize';
 import { Dirty } from '../core/store';
 import { defaultAdjust, identityCurves } from '../core/defaults';
-import type { BandMode, Tracer, TurnPolicy, VtraceParams } from '../core/types';
+import type { BandMode, RGB, Tracer, TurnPolicy, VtraceParams } from '../core/types';
 import {
   button, buttonRow, colourField, el, field, help, numberInput, Panel,
   segmented, select, slider, toggle,
@@ -149,15 +149,53 @@ export function documentPanel(ctx: Ctx): Panel {
   p.add(colourField(p, {
     label: 'Paper',
     get: () => s.get().canvas.paper ?? [1, 1, 1],
-    set: (v) => s.updateCanvas({ paper: v }),
-    nullable: {
-      label: 'Transparent',
-      get: () => s.get().canvas.paper === null,
-      set: (v) => s.updateCanvas({ paper: v ? null : [1, 1, 1] }),
-    },
+    set: (v) => s.updateCanvas({ paper: v }, 'canvas:paper'),
   }));
+  p.add(paperChoices(ctx));
 
   return p;
+}
+
+/**
+ * The paper in one click: the usual stocks and None, with whichever is current
+ * lit. None is a paper like the others rather than a checkbox, so getting back
+ * from a transparent ground is the same click as leaving it.
+ */
+const PAPERS: { label: string; rgb: RGB | null; title: string }[] = [
+  { label: 'White', rgb: [1, 1, 1], title: 'White paper' },
+  { label: 'Cream', rgb: [0.96, 0.93, 0.85], title: 'Warm off-white stock' },
+  { label: 'Kraft', rgb: [0.78, 0.66, 0.5], title: 'Brown kraft paper' },
+  { label: 'Grey', rgb: [0.62, 0.62, 0.6], title: 'Mid-grey stock' },
+  { label: 'Black', rgb: [0.07, 0.07, 0.08], title: 'Black paper: print light inks on it' },
+  { label: 'None', rgb: null, title: 'Transparent: nothing behind the drawing, for use as an asset' },
+];
+
+export function paperChoices(ctx: Ctx): HTMLElement {
+  const s = ctx.store;
+  const row = el('div', 'segmented paper-choices');
+  const same = (a: RGB | null, b: RGB | null): boolean =>
+    a === null || b === null ? a === b : a.every((v, i) => Math.abs(v - b[i]) < 0.004);
+  const segs = PAPERS.map((paper) => {
+    const seg = el('button', 'seg');
+    seg.type = 'button';
+    seg.title = paper.title;
+    const chip = el('span', 'paper-chip');
+    if (paper.rgb) chip.style.background = rgbToHex(paper.rgb);
+    else chip.classList.add('none');
+    seg.append(chip, document.createTextNode(paper.label));
+    seg.addEventListener('click', () => s.updateCanvas({ paper: paper.rgb ? [...paper.rgb] as RGB : null }, 'canvas:paper'));
+    row.append(seg);
+    return seg;
+  });
+  const sync = () => {
+    const now = s.get().canvas.paper;
+    segs.forEach((seg, i) => seg.classList.toggle('on', same(PAPERS[i].rgb, now)));
+  };
+  // Panels sync through their host; this row may sit in more than one panel,
+  // so it listens to the store directly.
+  s.subscribe(sync);
+  sync();
+  return row;
 }
 
 export function imagePanel(ctx: Ctx): Panel {
@@ -507,7 +545,7 @@ export function regionsPanel(ctx: Ctx): Panel {
     'This image came in with a matte, so it is being treated as a cut-out: ' +
     'nothing is drawn where the source is transparent, and the empty ground is ' +
     'left out of the histogram so the thresholds are chosen from the subject ' +
-    'alone. Set the paper to Transparent in Document to export it as an asset.',
+    'alone. Choose None below to export it as an asset, White to put it back on paper.',
   ));
   matteBox.append(slider(p, {
     label: 'Matte cut', min: 0, max: 1, step: 0.01,
@@ -515,10 +553,7 @@ export function regionsPanel(ctx: Ctx): Panel {
     set: (v) => s.updateBanding({ alphaCut: v }, 'banding:alpha'),
     hint: () => 'Source alpha below this is not part of the drawing at all',
   }));
-  matteBox.append(buttonRow(
-    button('Transparent paper', () => s.updateCanvas({ paper: null }, 'canvas:paper'),
-      { title: 'Export with nothing behind the drawing' }),
-  ));
+  matteBox.append(paperChoices(ctx));
   p.body.append(matteBox);
   p.onSync(() => {
     matteBox.style.display = ctx.engine.sourceMatte() ? '' : 'none';
