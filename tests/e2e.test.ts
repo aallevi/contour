@@ -116,8 +116,18 @@ const baseProject = (over: Partial<Project> = {}): Project => ({
 });
 
 describe.runIf(have)('the whole pipeline, on a real picture', () => {
-  mkdirSync('artifacts', { recursive: true });
-  const image = loadImage();
+  // A skipped describe still runs its body to collect the tests, so the
+  // picture is read only once a test asks for it — a fresh clone has no
+  // artifacts/ and must skip cleanly rather than fail on the missing file.
+  let loaded: AdjustedImage | null = null;
+  const lazy = (): AdjustedImage => {
+    if (!loaded) {
+      mkdirSync('artifacts', { recursive: true });
+      loaded = loadImage();
+    }
+    return loaded;
+  };
+  const image = new Proxy({} as AdjustedImage, { get: (_, k) => lazy()[k as keyof AdjustedImage] });
 
   it('posterises into nested tone bands and exports both formats', async () => {
     const project = baseProject();
