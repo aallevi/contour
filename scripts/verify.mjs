@@ -279,6 +279,19 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   const ungrouped = await p.evaluate(() => window.contour.store.get().bands.every((b) => !b.group) && !document.querySelector('.group-row'));
   check(48, 'Ungroup takes them out again', ungrouped);
 
+  // The light formats.
+  await p.evaluate(() => window.contour.applyPreset('Flat colour'));
+  await p.waitForTimeout(400);
+  await settle(p);
+  await p.waitForTimeout(400);
+  await settle(p);
+  const light = await p.evaluate(() => window.contour.light());
+  check(49, 'compact SVG is smaller than the SVG', light.compact < light.svg * 0.9, `${light.svg} \u2192 ${light.compact} bytes`);
+  check(49, 'SVGZ is the compact SVG gzipped, and smaller still', light.roundTrip && light.svgz < light.compact / 2, `${light.svgz} bytes`);
+  check(49, 'WebP is real lossless WebP and lighter than the PNG', light.riff === 'RIFFWEBP' && light.webp < light.png, `${light.png} \u2192 ${light.webp} bytes`);
+  const blurHint = await p.evaluate(() => [...document.querySelectorAll('.ctrl')].find((c) => c.querySelector('.ctrl-label')?.textContent === 'Blur')?.textContent ?? '');
+  check(50, 'blur says what it comes to on this picture', /px on this \d+ px picture/.test(blurHint), blurHint.slice(0, 90));
+
   // 23: the loading bar.
   const bar = await p.evaluate(async () => {
     window.contour.store.updateBanding({ levels: 6 });

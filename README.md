@@ -161,7 +161,7 @@ anything.
 | | Formats |
 |---|---|
 | Images in | PNG, JPEG, WebP, GIF, BMP; TIFF and, with ImageMagick, PSD, HEIC, camera raw and PDF in the desktop app |
-| Out | SVG and PDF (vector, at the document's print size), PNG at the document resolution, SVG plates |
+| Out | SVG and PDF (vector, at the document's print size), PNG at the document resolution, SVG plates; under *More…*, compact SVG (rounded and tightened), SVGZ (gzipped, the lightest vector) and lossless WebP |
 | Documents | *Save* and *Load*: `.contour` in the desktop app, `.contour.json` in a browser |
 
 ---

@@ -7,6 +7,9 @@ import { testCard } from '../image/testcard';
 import { exportSVG } from '../export/svg';
 import { exportPDF } from '../export/pdf';
 import { exportPNG } from '../export/png';
+import { exportCompactSVG, exportSVGZ, exportWebP } from '../export/light';
+
+type ExportKind = 'svg' | 'pdf' | 'png' | 'compact' | 'svgz' | 'webp';
 import { sceneWeight } from '../render/scene';
 import { exportPlates, planPlates } from '../export/plates';
 import { imageExtensions, isTauri, openFile, saveFile, saveFiles } from '../platform';
@@ -180,6 +183,17 @@ export class App {
       },
       presets: PRESETS.map((p) => p.name),
       plates: () => (this.scene ? exportPlates(this.scene) : null),
+      light: async () => {
+        if (!this.scene) return null;
+        const svg = exportSVG(this.scene).length;
+        const compact = exportCompactSVG(this.scene).length;
+        const svgz = await exportSVGZ(this.scene);
+        const back = await new Response(new Blob([svgz.slice().buffer as ArrayBuffer]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+        const png = (await exportPNG(this.scene, 1)).length;
+        const webp = await exportWebP(this.scene);
+        const riff = String.fromCharCode(...webp.slice(0, 4)) + String.fromCharCode(...webp.slice(8, 12));
+        return { svg, compact, svgz: svgz.length, roundTrip: back === exportCompactSVG(this.scene), png, webp: webp.length, riff };
+      },
       exportSVG: () => (this.scene ? exportSVG(this.scene) : ''),
       exportPDF: async () => (this.scene ? exportPDF(this.scene) : null),
       exportPNG: async () => (this.scene ? exportPNG(this.scene, 1) : null),
@@ -283,6 +297,23 @@ export class App {
       }),
     );
     exportButtons.classList.add('export-buttons');
+    // The light formats, one menu rather than three more buttons.
+    const light = el('select', 'select light-select');
+    light.setAttribute('aria-label', 'More export formats');
+    light.title = 'Lighter files: compact SVG, SVGZ, lossless WebP';
+    const lightEntries: [ExportKind, string][] = [
+      ['compact', 'Compact SVG \u2014 same vector, tighter'],
+      ['svgz', 'SVGZ \u2014 gzipped, the lightest vector'],
+      ['webp', 'WebP \u2014 lossless, far lighter than PNG'],
+    ];
+    light.append(new Option('More\u2026', ''));
+    for (const [v, label] of lightEntries) light.append(new Option(label, v));
+    light.addEventListener('change', () => {
+      const v = light.value as ExportKind;
+      light.value = '';
+      if (v) void this.exportFile(v);
+    });
+    exportButtons.append(light);
     bar.append(exportButtons);
     bar.append(group(
       button('Save', () => void this.saveProject(), { title: 'Save the document (\u2318S)' }),
@@ -833,10 +864,24 @@ export class App {
     return true;
   }
 
-  private async exportFile(kind: 'svg' | 'pdf' | 'png'): Promise<void> {
+  private async exportFile(kind: ExportKind): Promise<void> {
     if (!this.scene) return;
+    const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} KB`;
     try {
-      if (kind === 'svg') {
+      if (kind === 'compact') {
+        const text = exportCompactSVG(this.scene);
+        const full = exportSVG(this.scene).length;
+        const ok = await saveFile(text, 'drawing.svg', [{ name: 'SVG', extensions: ['svg'] }]);
+        if (ok) this.setStatus(`Exported compact SVG \u2014 ${kb(text.length)}, ${Math.round((1 - text.length / full) * 100)}% smaller than the full SVG`);
+      } else if (kind === 'svgz') {
+        const bytes = await exportSVGZ(this.scene);
+        const ok = await saveFile(bytes, 'drawing.svgz', [{ name: 'SVGZ', extensions: ['svgz'] }]);
+        if (ok) this.setStatus(`Exported SVGZ \u2014 ${kb(bytes.length)}`);
+      } else if (kind === 'webp') {
+        const bytes = await exportWebP(this.scene);
+        const ok = await saveFile(bytes, 'drawing.webp', [{ name: 'WebP', extensions: ['webp'] }]);
+        if (ok) this.setStatus(`Exported WebP \u2014 ${kb(bytes.length)}, lossless`);
+      } else if (kind === 'svg') {
         const text = exportSVG(this.scene);
         const ok = await saveFile(text, 'drawing.svg', [{ name: 'SVG', extensions: ['svg'] }]);
         if (ok) this.setStatus(`Exported SVG — ${(text.length / 1024).toFixed(0)} KB`);
@@ -866,6 +911,9 @@ export class App {
       ['png', 'PNG \u2014 a picture file, at the document\u2019s pixel size', () => void this.exportFile('png')],
       ['svg', 'SVG \u2014 vector drawing, sharp at any size', () => void this.exportFile('svg')],
       ['pdf', 'PDF \u2014 vector, print-ready at the document\u2019s size', () => void this.exportFile('pdf')],
+      ['compact', 'Compact SVG \u2014 the same vector, rounded and tightened', () => void this.exportFile('compact')],
+      ['svgz', 'SVGZ \u2014 compact SVG, gzipped: the lightest vector', () => void this.exportFile('svgz')],
+      ['webp', 'WebP \u2014 lossless pixels, far lighter than PNG', () => void this.exportFile('webp')],
       ['plates', 'Plates \u2014 one black film per band, for burning screens', () => void this.exportPlateFiles()],
     ];
     sel.append(new Option('Export\u2026', ''));

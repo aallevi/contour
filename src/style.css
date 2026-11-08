@@ -1233,3 +1233,4 @@ polyline.shape-line { fill: none; }
 .multi-actions { display: grid; grid-template-columns: repeat(3, 1fr); margin: 4px 0; }
 .multi-actions .btn { border-right-width: 0; }
 .multi-actions .btn:last-child { border-right-width: 1px; }
+.light-select { width: auto; min-width: 0; max-width: 84px; }

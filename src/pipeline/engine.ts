@@ -58,6 +58,22 @@ function lowerLevel(levels: number[], level: number): number {
   return best;
 }
 
+/** The short edge the Blur slider is measured against. */
+export const BLUR_REFERENCE = 1000;
+
+/**
+ * Blur as a share of the picture rather than a count of its pixels.
+ *
+ * Two pixels of blur is a light softening on a 1400-pixel photograph and a
+ * smear across a 300-pixel one, where it can be a whole eyelid. So the slider
+ * means pixels on a picture whose short edge is 1000, and a smaller picture
+ * gets proportionally less — the same rule every length in Contour follows,
+ * so a preset softens a thumbnail and a scan by the same visible amount.
+ */
+export function blurFor(blur: number, width: number, height: number): number {
+  return blur * (Math.min(width, height) / BLUR_REFERENCE);
+}
+
 export class Engine {
   /**
    * Built on first use, not in the constructor.
@@ -213,7 +229,11 @@ export class Engine {
     );
     this.workW = width;
     this.workH = height;
-    this.adjusted = this.gpu().run(project.adjust, width, height);
+    this.adjusted = this.gpu().run(
+      { ...project.adjust, blur: blurFor(project.adjust.blur, width, height) },
+      width,
+      height,
+    );
     // The matte is cut before the histogram is taken, because the histogram is
     // what the spacing rules read and a cut-out's empty ground is not a tone.
     this.matte = buildMatte(this.adjusted.rgba, project.banding.alphaCut);

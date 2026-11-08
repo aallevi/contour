@@ -492,6 +492,38 @@ fn decode_image(path: String, magick_path: Option<String>) -> Result<DecodedImag
 
 /// Extensions worth offering in the open dialog. ImageMagick widens this a lot,
 /// so the list depends on whether it is there.
+// -- lossless WebP -------------------------------------------------------------
+
+/// RGBA pixels to lossless WebP, for the web view that cannot encode it.
+///
+/// WebKit's canvas hands back a PNG when asked for WebP, so the desktop app
+/// encodes here. The body is raw RGBA; `x-size` says `width height`.
+#[tauri::command]
+fn encode_webp(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
+    let body = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes,
+        _ => return Err("encode_webp expects a raw body".into()),
+    };
+    let size = request
+        .headers()
+        .get("x-size")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("missing x-size")?;
+    let mut it = size.split_whitespace().map(|s| s.parse::<u32>());
+    let (w, h) = match (it.next(), it.next()) {
+        (Some(Ok(w)), Some(Ok(h))) => (w, h),
+        _ => return Err("bad x-size".into()),
+    };
+    if body.len() != (w as usize) * (h as usize) * 4 {
+        return Err("pixel data does not match the size".into());
+    }
+    let mut out = Vec::new();
+    image::codecs::webp::WebPEncoder::new_lossless(&mut out)
+        .encode(body, w, h, image::ExtendedColorType::Rgba8)
+        .map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(out))
+}
+
 // -- subject masks -------------------------------------------------------------
 
 /// The subject of a picture as an 8-bit grey PNG mask, by Apple's Vision.
@@ -569,6 +601,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             vision_subject,
+            encode_webp,
             probe_tools,
             trace_bands,
             decode_image,

@@ -8,7 +8,8 @@ import { exportSVG } from './svg';
  * less code and more faithful than a second renderer would be — the PNG is
  * guaranteed to agree with the SVG because it *is* the SVG.
  */
-export async function exportPNG(scene: Scene, scale = 1): Promise<Uint8Array> {
+/** The drawing drawn into a canvas at `scale` times the document's pixel size. */
+export async function renderRGBA(scene: Scene, scale = 1): Promise<{ canvas: HTMLCanvasElement; width: number; height: number }> {
   // Pixel units on the root, not inches: the browser rasterises an SVG at its
   // intrinsic size and then scales the bitmap, so a 300 dpi drawing declared as
   // 3.33 inches would be drawn at 320 pixels and blown up to the size asked
@@ -28,16 +29,20 @@ export async function exportPNG(scene: Scene, scale = 1): Promise<Uint8Array> {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
-    const g = canvas.getContext('2d')!;
+    const g = canvas.getContext('2d', { willReadFrequently: true })!;
     // A transparent document has to stay transparent; a papered one already
     // carries its background inside the SVG.
     g.drawImage(img, 0, 0, width, height);
-
-    const out: Blob = await new Promise((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encoding failed'))), 'image/png');
-    });
-    return new Uint8Array(await out.arrayBuffer());
+    return { canvas, width, height };
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+export async function exportPNG(scene: Scene, scale = 1): Promise<Uint8Array> {
+  const { canvas } = await renderRGBA(scene, scale);
+  const out: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encoding failed'))), 'image/png');
+  });
+  return new Uint8Array(await out.arrayBuffer());
 }

@@ -9,6 +9,8 @@ import {
   segmented, select, slider, toggle,
 } from './controls';
 import { curveEditor, thresholdStrip } from './curves';
+import { blurFor } from '../pipeline/engine';
+import { workingSize } from '../image/adjust';
 import type { Ctx } from './context';
 
 /**
@@ -396,9 +398,15 @@ export function imagePanel(ctx: Ctx): Panel {
     'points. Soften first and the shapes come out drawn rather than photocopied.',
   ));
   shape.append(slider(p, {
-    label: 'Blur', min: 0, max: 24, step: 0.1, unit: ' px',
+    label: 'Blur', min: 0, max: 24, step: 0.1,
     get: () => a().blur,
     set: (v) => s.updateAdjust({ blur: v }, 'adjust:blur'),
+    hint: () => {
+      const src = s.get().source;
+      if (!src || a().blur <= 0) return 'Relative to the picture: a small picture gets less';
+      const { width, height } = workingSize(src.width, src.height, s.get().banding.resolution);
+      return `${blurFor(a().blur, width, height).toFixed(1)} px on this ${Math.min(width, height)} px picture \u2014 a small picture gets less`;
+    },
   }));
   shape.append(slider(p, {
     label: 'Denoise', min: 0, max: 4, step: 1,
