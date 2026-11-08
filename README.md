@@ -105,7 +105,8 @@ npm run install-app      # macOS: build and copy into /Applications (add -- --la
    interface: *Fill*, *Lines* and *Text*, each from a grid of little squares or
    a saturation and brightness field with hue and *Vivid* (Display P3) sliders.
    *Reset* brings back the green. With the paper set to *None*, the sheet shows
-   a marbled check instead of a plain one.
+   a marbled check; *Clear paper* in the same popover switches it back to the
+   plain one.
 7. **Export** to PNG, SVG or PDF, or *Plates* for screen printing. While a
    change retraces, a bar along the top of the stage says so, over the last
    drawing.

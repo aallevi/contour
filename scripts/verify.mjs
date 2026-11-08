@@ -251,9 +251,19 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
     [...document.querySelectorAll('.gui-head .btn')].find((b) => b.textContent === 'Reset').click();
     const back = root().getPropertyValue('--panel').trim();
     const cleared = !localStorage.getItem('contour.gui-colours');
+    const segs = [...document.querySelectorAll('.gui-ground .seg')];
+    segs.find((b) => b.textContent === 'Check').click();
+    const surface = document.querySelector('.surface');
+    surface.classList.add('transparent');
+    const checkBg = getComputedStyle(surface).backgroundImage;
+    const checkSaved = localStorage.getItem('contour.ground') === 'check';
+    segs.find((b) => b.textContent === 'Marbled').click();
+    const marbleBg = getComputedStyle(surface).backgroundImage;
+    surface.classList.toggle('transparent', window.contour.store.get().canvas.paper === null);
+    var ground = { check: checkSaved && !checkBg.includes('url(') && checkBg.includes('conic'), marbled: marbleBg.includes('url(') };
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    return { open, squares, before, fill, stage, text, saved, back, cleared,
+    return { ground, open, squares, before, fill, stage, text, saved, back, cleared,
       marble: root().getPropertyValue('--marble').startsWith('url(data:image/png') };
   });
   check(42, 'the mark opens interface colours with a grid of little squares', gui.open && gui.squares >= 100, `${gui.squares} squares`);
@@ -261,6 +271,7 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   check(42, 'a text square recolours the text, and is remembered', gui.text === '#000000' && gui.saved);
   check(42, 'Reset puts the workshop green back', gui.back === gui.before && gui.cleared, gui.back);
   check(43, 'a sheet with no paper shows the marbled check', gui.marble);
+  check(43, 'Clear paper switches to the plain check and back', gui.ground.check && gui.ground.marbled);
 
   check(41, 'a colour picked from the picture becomes a band', picked.n === c1 + 1 && picked.groups === picked.n, `${c1} → ${picked.n} bands, ${picked.groups} drawn`);
   await p.close();

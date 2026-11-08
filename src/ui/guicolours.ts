@@ -132,6 +132,31 @@ export function applyGuiColours(c: Choices): void {
 /** Put the saved colours on before the first paint. */
 export function restoreGuiColours(): void {
   applyGuiColours(load());
+  applyGround(loadGround());
+}
+
+/**
+ * What a sheet with no paper shows behind the drawing: the marbled check, or
+ * the plain one every other program uses. A viewing preference, like the
+ * colours, and never part of a document.
+ */
+export type Ground = 'marbled' | 'check';
+const GROUND_KEY = 'contour.ground';
+
+function loadGround(): Ground {
+  try {
+    return localStorage.getItem(GROUND_KEY) === 'check' ? 'check' : 'marbled';
+  } catch {
+    return 'marbled';
+  }
+}
+
+function applyGround(g: Ground): void {
+  document.documentElement.dataset.ground = g;
+  try {
+    if (g === 'marbled') localStorage.removeItem(GROUND_KEY);
+    else localStorage.setItem(GROUND_KEY, g);
+  } catch { /* lasts as long as the page */ }
 }
 
 /** The little squares: hue across, light to dark down, a grey row at the top. */
@@ -249,10 +274,30 @@ export function guiColourButton(trigger: HTMLElement): void {
   });
   hexRow.append(swatch, hexIn, resetOne);
 
-  pop.append(head, tabs, grid, field, hue.row, bright.row, vivid.row, hexRow);
+  const groundRow = el('div', 'gui-ground');
+  const groundLabel = el('span', 'gui-range-label');
+  groundLabel.textContent = 'Clear paper';
+  const groundSeg = el('div', 'segmented');
+  const grounds: { value: Ground; label: string; title: string }[] = [
+    { value: 'marbled', label: 'Marbled', title: 'Little squares combed like marbled paper' },
+    { value: 'check', label: 'Check', title: 'The plain check grid' },
+  ];
+  const groundButtons = grounds.map((g) => {
+    const b = el('button', 'seg');
+    b.type = 'button';
+    b.textContent = g.label;
+    b.title = g.title;
+    b.addEventListener('click', () => { applyGround(g.value); sync(); });
+    groundSeg.append(b);
+    return { b, g };
+  });
+  groundRow.append(groundLabel, groundSeg);
+
+  pop.append(head, tabs, grid, field, hue.row, bright.row, vivid.row, hexRow, groundRow);
   document.body.append(pop);
 
   reset.addEventListener('click', () => {
+    applyGround('marbled');
     choices = {};
     save(choices);
     applyGuiColours(choices);
@@ -284,7 +329,9 @@ export function guiColourButton(trigger: HTMLElement): void {
     swatch.style.background = css(p);
     if (document.activeElement !== hexIn) hexIn.value = hex(hsvToRgb(p.h, p.s, p.v));
     resetOne.disabled = !choices[target];
-    reset.disabled = !Object.keys(choices).length;
+    const ground = document.documentElement.dataset.ground ?? 'marbled';
+    for (const { b, g } of groundButtons) b.classList.toggle('on', g.value === ground);
+    reset.disabled = !Object.keys(choices).length && ground === 'marbled';
   }
 
   const place = () => {

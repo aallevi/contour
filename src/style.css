@@ -241,6 +241,9 @@ body {
   background: var(--marble) 0 0 / 240px 240px repeat,
     repeating-conic-gradient(#d6d6d2 0% 25%, #f6f6f4 0% 50%) 0 0 / 12px 12px;
 }
+:root[data-ground="check"] .surface.transparent {
+  background: repeating-conic-gradient(#d8d8d8 0% 25%, #f4f4f4 0% 50%) 0 0 / 16px 16px;
+}
 
 .surface > * {
   position: absolute;
@@ -1168,3 +1171,5 @@ body {
 .gui-swatch { height: 22px; border: 1px solid var(--line); }
 /* No sidebar scrolling to protect inside the popover, so its sliders take the finger. */
 .gui-colours .range { pointer-events: auto; }
+.gui-ground { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 6px; }
+.gui-ground .segmented { display: grid; grid-template-columns: 1fr 1fr; }
