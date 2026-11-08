@@ -379,8 +379,9 @@ export function regionsPanel(ctx: Ctx): Panel {
   toneBox.append(segmented(p, {
     label: 'Threshold spacing',
     options: [
-      { value: 'equal-area', label: 'Equal area' },
-      { value: 'even', label: 'Even' },
+      { value: 'balanced', label: 'Balanced', title: 'Halfway between equal area and even, over the picture’s own range: the steady default' },
+      { value: 'equal-area', label: 'Equal area', title: 'The same share of the picture in every band; sensitive where tones crowd' },
+      { value: 'even', label: 'Even', title: 'Evenly spaced from black to white' },
       { value: 'manual', label: 'Manual' },
     ],
     get: () => b().spacing,
@@ -393,12 +394,13 @@ export function regionsPanel(ctx: Ctx): Panel {
     },
   }));
   toneBox.append(thresholdStrip(p, {
-    get: () => ctx.engine.resolvedBanding().thresholds,
+    // A cut-out's Highlights band cuts at 1 and has no divider to drag.
+    get: () => ctx.engine.resolvedBanding().thresholds.filter((t) => t < 1),
     set: (thresholds) => {
-      const bands = s.get().bands.map((band, i) => ({
-        ...band,
-        threshold: thresholds[i] ?? band.threshold,
-      }));
+      let k = 0;
+      const bands = s.get().bands.map((band) => (band.threshold < 1
+        ? { ...band, threshold: thresholds[k++] ?? band.threshold }
+        : band));
       s.updateBanding({ spacing: 'manual', thresholds }, 'banding:thresholds');
       s.replaceBands(bands, Dirty.Band, 'bands:thresholds');
     },
@@ -407,7 +409,7 @@ export function regionsPanel(ctx: Ctx): Panel {
       const bands = s.get().bands;
       // Bands are ordered dark to light and the strip runs the same way; the
       // paper colour closes it off at the light end.
-      const cols = bands.map((band) => rgbToHex(band.colour));
+      const cols = bands.filter((band) => band.threshold < 1).map((band) => rgbToHex(band.colour));
       cols.push(rgbToHex(s.get().canvas.paper ?? [1, 1, 1]));
       return cols;
     },

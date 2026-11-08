@@ -1,6 +1,6 @@
 import type { Store } from '../core/store';
 import type { Engine } from '../pipeline/engine';
-import type { FreePoint, GradientStop } from '../core/types';
+import type { FreePoint, GradientStop, Spacing } from '../core/types';
 
 /**
  * What every panel is handed.
@@ -33,6 +33,8 @@ export type Ctx = {
    * band's fill, shaping and opacity where one is still there to keep.
    */
   rebuildBands(): void;
+  /** A cut-out gets a Highlights band; anything else loses it. */
+  ensureHighlights(): void;
   /** Colour mode: copy the resolved palette onto the bands. */
   takePaletteIntoBands(): void;
   /**
@@ -43,7 +45,7 @@ export type Ctx = {
    * adjusted, which is maddening; applying it on request keeps the thresholds
    * stable and visible, and the button is there when they want redoing.
    */
-  respace(rule?: 'even' | 'equal-area'): void;
+  respace(rule?: Exclude<Spacing, 'manual'>): void;
   /**
    * Read the photograph at each of a band's gradient stops.
    *

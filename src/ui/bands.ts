@@ -2,8 +2,8 @@ import { contrastInk, cssRgb, hexToRgb, lumaOf, rgbToHex } from '../core/color';
 import { paperChoices } from './panels';
 import { defaultBand, defaultFreeform, defaultGradient, gradientRamp, ID } from '../core/defaults';
 import { Dirty } from '../core/store';
-import { equalAreaThresholds, evenThresholds } from '../band/posterize';
-import type { Band, Fill, FreeformFill, Project, FreePoint, GradientFill, GradientStop, RGB } from '../core/types';
+import { balancedThresholds, equalAreaThresholds, evenThresholds } from '../band/posterize';
+import type { Band, Fill, FreeformFill, Project, FreePoint, GradientFill, GradientStop, RGB, Spacing } from '../core/types';
 import {
   button, buttonRow, colourField, el, help, lengthSlider, Panel, segmented, slider, toggle,
 } from './controls';
@@ -636,7 +636,8 @@ export function rebuildBands(ctx: Ctx): void {
     ? thresholdsFor(banding.spacing, ctx.engine.histogram(), levels)
     : [];
 
-  const old = project.bands;
+  const old = project.bands.filter(isCut);
+  const keptHighlights = project.bands.find((b) => !isCut(b));
   const next: Band[] = [];
   for (let i = 0; i < count; i++) {
     const threshold = thresholds[i] ?? (i + 1) / levels;
@@ -650,8 +651,49 @@ export function rebuildBands(ctx: Ctx): void {
       : fresh);
   }
   s.replaceBands(next, Dirty.Band, 'bands:rebuild');
+  ensureHighlights(ctx, keptHighlights);
   adoptLightestAsPaper(ctx);
   if (!next.some((b) => b.id === ctx.selectedBand())) ctx.selectBand(next[0]?.id ?? '');
+}
+
+/**
+ * A cut-out's lightest tones, as a band.
+ *
+ * Without paper the lightest level is the paper, and on a photograph that is
+ * right: the sheet shows there. On a cut-out it is wrong — the subject's
+ * highlights are part of the subject, and leaving them out punches holes in it
+ * wherever the light falls, the background showing through a white shirt. So
+ * when the source has a matte the stack gets one more band, Highlights, which
+ * takes everything inside the matte that no darker band has (a tone cut at 1,
+ * or the lightest palette colour) and leaves only the true background clear.
+ * It is an ordinary band — recolour it, hide it, delete it — and it comes back
+ * only when the bands are rebuilt.
+ */
+export function ensureHighlights(ctx: Ctx, keep?: Band): void {
+  const s = ctx.store;
+  const project = s.get();
+  const cutout = !!ctx.engine.sourceMatte();
+  const has = project.bands.some((b) => !isCut(b));
+  if (cutout === has) return;
+  if (!cutout) {
+    s.replaceBands(project.bands.filter(isCut), Dirty.Band, 'bands:highlights');
+    return;
+  }
+  let colour: RGB;
+  if (project.banding.mode === 'colour') {
+    const palette = ctx.engine.resolvedBanding().palette;
+    colour = palette[project.bands.length] ?? palette[palette.length - 1] ?? [0.95, 0.95, 0.95];
+  } else {
+    // One more step of the ramp the bands are already on.
+    const n = project.bands.length;
+    const a = project.bands[n - 1]?.colour ?? [0.6, 0.6, 0.6];
+    const b = project.bands[n - 2]?.colour ?? [0.3, 0.3, 0.3];
+    colour = a.map((v, i) => Math.min(0.97, Math.max(v, v + (v - b[i])))) as RGB;
+  }
+  const band: Band = keep
+    ? { ...keep, threshold: 1 }
+    : { ...defaultBand('Highlights', colour, 1), colour, source: colour };
+  s.replaceBands([...project.bands, band], Dirty.Band, 'bands:highlights');
 }
 
 /**
@@ -701,7 +743,7 @@ export function addBand(ctx: Ctx): void {
   }
   const levels = banding.levels + 1;
   if (banding.mode === 'tone') {
-    s.updateBanding({ levels, spacing: banding.spacing === 'manual' ? 'equal-area' : banding.spacing }, 'banding:levels');
+    s.updateBanding({ levels, spacing: banding.spacing === 'manual' ? 'balanced' : banding.spacing }, 'banding:levels');
     rebuildBands(ctx);
     return;
   }
@@ -752,23 +794,31 @@ export function addPickedColour(ctx: Ctx, rgb: RGB): void {
  * because a stack that has just changed size has no manual positions to keep.
  */
 export function thresholdsFor(
-  spacing: 'even' | 'equal-area' | 'manual',
+  spacing: Spacing,
   hist: Uint32Array,
   levels: number,
 ): number[] {
-  return spacing === 'even' ? evenThresholds(levels) : equalAreaThresholds(hist, levels);
+  return spacing === 'even' ? evenThresholds(levels)
+    : spacing === 'equal-area' ? equalAreaThresholds(hist, levels)
+      : balancedThresholds(hist, levels);
 }
 
+/** The bands that cut at a tone, as opposed to a cut-out's Highlights band. */
+const isCut = (b: Band): boolean => b.threshold < 1;
+
 /** Apply a spacing rule to the bands that exist now. */
-export function respace(ctx: Ctx, rule?: 'even' | 'equal-area'): void {
+export function respace(ctx: Ctx, rule?: Exclude<Spacing, 'manual'>): void {
   const s = ctx.store;
   const project = s.get();
   if (project.banding.mode !== 'tone' || project.bands.length === 0) return;
 
-  const spacing = rule ?? (project.banding.spacing === 'manual' ? 'equal-area' : project.banding.spacing);
-  // The lightest level is the paper, so N bands means N + 1 levels.
-  const thresholds = thresholdsFor(spacing, ctx.engine.histogram(), project.bands.length + 1);
-  const bands = project.bands.map((b, i) => ({ ...b, threshold: thresholds[i] ?? b.threshold }));
+  const spacing = rule ?? (project.banding.spacing === 'manual' ? 'balanced' : project.banding.spacing);
+  // The lightest level is the paper (or a cut-out's Highlights band, which
+  // takes everything left), so N cutting bands means N + 1 levels.
+  const cuts = project.bands.filter(isCut).length;
+  const thresholds = thresholdsFor(spacing, ctx.engine.histogram(), cuts + 1);
+  let k = 0;
+  const bands = project.bands.map((b) => (isCut(b) ? { ...b, threshold: thresholds[k++] ?? b.threshold } : b));
 
   s.updateBanding({ spacing, thresholds }, 'banding:spacing');
   s.replaceBands(bands, Dirty.Band, 'bands:respace');
@@ -783,6 +833,7 @@ export function respace(ctx: Ctx, rule?: 'even' | 'equal-area'): void {
 export function needsRespace(ctx: Ctx): boolean {
   const project = ctx.store.get();
   if (project.banding.mode !== 'tone' || project.banding.spacing === 'manual') return false;
-  const want = thresholdsFor(project.banding.spacing, ctx.engine.histogram(), project.bands.length + 1);
-  return project.bands.some((b, i) => Math.abs(b.threshold - (want[i] ?? b.threshold)) > 0.004);
+  const cuts = project.bands.filter(isCut);
+  const want = thresholdsFor(project.banding.spacing, ctx.engine.histogram(), cuts.length + 1);
+  return cuts.some((b, i) => Math.abs(b.threshold - (want[i] ?? b.threshold)) > 0.004);
 }

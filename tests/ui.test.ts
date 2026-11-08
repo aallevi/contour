@@ -38,6 +38,7 @@ function context(): Ctx {
     status: () => {},
     openImage: async () => {},
     pickColour: () => {},
+    ensureHighlights: () => {},
     afterTrace: () => {},
     rebuildBands: () => {},
     takePaletteIntoBands: () => {},

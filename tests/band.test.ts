@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  equalAreaThresholds, evenThresholds, histogram, lowerCutOf, lumaField, maskAtCut, maskAtLevel,
+  balancedThresholds, equalAreaThresholds, evenThresholds, histogram, lowerCutOf, lumaField, maskAtCut, maskAtLevel,
 } from '../src/band/posterize';
 import { colourIndex, nearestPaletteIndex, quantize } from '../src/band/quantize';
 import { lumaOf, rgbToHex } from '../src/core/color';
@@ -245,5 +245,20 @@ describe('colour bands nest by palette index, not by lightness', () => {
     expect(nearestPaletteIndex(PALETTE, PALETTE[1])).toBe(1);
     // And an edited colour falls back to whichever entry is nearest in Lab.
     expect(nearestPaletteIndex(PALETTE, [0xa5 / 255, 0x95 / 255, 0x86 / 255])).toBe(2);
+  });
+});
+
+describe('balanced spacing', () => {
+  it('spreads cuts that equal-area crowds into one tone', () => {
+    // Most of the picture in a narrow mid-dark band, a little of everything else.
+    const hist = new Uint32Array(256);
+    for (let b = 0; b < 256; b++) hist[b] = 10;
+    for (let b = 50; b < 85; b++) hist[b] = 2000;
+    const area = equalAreaThresholds(hist, 4);
+    const bal = balancedThresholds(hist, 4);
+    const spread = (t: number[]) => t[t.length - 1] - t[0];
+    expect(spread(bal)).toBeGreaterThan(spread(area) * 1.5);
+    for (let i = 1; i < bal.length; i++) expect(bal[i]).toBeGreaterThan(bal[i - 1]);
+    expect(bal[bal.length - 1]).toBeLessThan(1);
   });
 });

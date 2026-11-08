@@ -109,6 +109,45 @@ export function equalAreaThresholds(hist: Uint32Array, levels: number): number[]
 }
 
 /**
+ * Halfway from equal-area towards even spacing over the picture's own range.
+ *
+ * Equal-area is right about where to spend levels and wrong about how far to
+ * go: a picture that is mostly one mid tone — a red cloth, a grey sky — gets
+ * every cut packed inside that tone, a few hundredths apart, and then the weave
+ * of the cloth flips pixels across them and each band breaks into specks.
+ * Even spacing over the tones actually present (first to ninety-ninth
+ * percentile, so a few specular pixels don't stretch it) never crowds, but
+ * ignores where the pixels are. The midpoint of the two still puts more cuts
+ * where the picture is busy, while keeping them far enough apart that a band
+ * is a region rather than a texture.
+ */
+export function balancedThresholds(hist: Uint32Array, levels: number): number[] {
+  const n = Math.max(2, Math.round(levels));
+  const area = equalAreaThresholds(hist, n);
+  let total = 0;
+  for (const v of hist) total += v;
+  if (total === 0) return area;
+  const at = (q: number): number => {
+    let c = 0;
+    for (let b = 0; b < HIST_BINS; b++) {
+      c += hist[b];
+      if (c >= total * q) return b / (HIST_BINS - 1);
+    }
+    return 1;
+  };
+  const lo = at(0.01);
+  const hi = Math.max(lo + 0.05, at(0.99));
+  const eps = 1 / (HIST_BINS - 1);
+  const out = area.map((t, i) => {
+    const even = lo + ((hi - lo) * (i + 1)) / n;
+    return (t + even) / 2;
+  });
+  for (let i = 1; i < out.length; i++) if (out[i] <= out[i - 1]) out[i] = out[i - 1] + eps;
+  for (let i = out.length - 1; i >= 0; i--) out[i] = Math.min(out[i], 1 - eps * (out.length - i));
+  return out;
+}
+
+/**
  * Luminance as a byte per pixel — the field every mask is cut out of.
  *
  * Both modes reduce to this. Tone banding uses the image's own luminance;

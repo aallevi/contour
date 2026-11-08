@@ -18,9 +18,10 @@ export type Preset = { name: string; about: string; apply: (ctx: Ctx) => void };
 const tone = (ctx: Ctx, levels: number, bands: Band[], adjust: Partial<ReturnType<typeof defaultAdjust>>): void => {
   const s = ctx.store;
   s.updateAdjust({ ...defaultAdjust(), ...adjust }, 'preset');
-  s.updateBanding({ mode: 'tone', levels, spacing: 'equal-area', nested: true });
+  s.updateBanding({ mode: 'tone', levels, spacing: 'balanced', nested: true });
   s.updateTrace(defaultTrace());
   s.replaceBands(bands);
+  ctx.ensureHighlights();
 };
 
 const colour = (ctx: Ctx, levels: number, adjust: Partial<ReturnType<typeof defaultAdjust>>, after?: (b: Band[]) => void): void => {

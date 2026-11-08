@@ -74,10 +74,13 @@ export type Banding = {
    * Tone mode: where the thresholds sit between black and white.
    *
    * `even` spaces them uniformly, `equal-area` puts the same number of pixels in
-   * each band (the histogram-equalised choice, which is usually the one that
-   * looks deliberate), and `manual` uses whatever the user dragged them to.
+   * each band (the histogram-equalised choice), `balanced` goes halfway from
+   * equal-area towards even spacing over the picture's own tonal range — the
+   * default, because pure equal-area crowds every cut into the tones a picture
+   * has most of, where texture flips pixels between bands — and `manual` uses
+   * whatever the user dragged them to.
    */
-  spacing: 'even' | 'equal-area' | 'manual';
+  spacing: Spacing;
   /** Tone mode, `manual`: upper tone limit per band, ascending. */
   thresholds: number[];
   /** Colour mode: the quantised palette, ordered dark to light. */
@@ -347,6 +350,9 @@ export type Band = {
 };
 
 // -- document ----------------------------------------------------------------
+
+/** How tone thresholds are placed; see `Banding.spacing`. */
+export type Spacing = 'balanced' | 'even' | 'equal-area' | 'manual';
 
 export type Canvas = {
   /** Output size in canvas pixels. */

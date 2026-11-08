@@ -119,7 +119,10 @@ swatch, or *Pick a colour from the picture* — or by *Tone* for a ramp of one
 ink. *+ Add band* adds one more region; *+ Add colour from picture* turns a
 colour you click into a band of its own. The paper is the last row of the band
 list: White, Cream, Kraft, Grey, Black or None (transparent), one click each.
-The band list shows how much of the sheet each band prints. *Plates* then
+On a cut-out (a PNG with its background removed) the paper starts as *None*,
+and a *Highlights* band paints the subject's lightest tones, so only the true
+background stays clear. The band list shows how much of the sheet each band
+prints. *Plates* then
 writes one film per band, solid black on white, knocked out wherever a band
 painted over it covers the paper, with identical registration marks on every
 film. A band shaded with a gradient is not one ink, so it is left out and named.

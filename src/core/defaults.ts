@@ -121,7 +121,7 @@ export function gradientRamp(colour: RGB, spread = 0.18): GradientStop[] {
 export const defaultBanding = (): Banding => ({
   mode: 'tone',
   levels: 4,
-  spacing: 'equal-area',
+  spacing: 'balanced',
   thresholds: [],
   palette: [],
   locked: [],

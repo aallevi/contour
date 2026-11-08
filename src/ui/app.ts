@@ -13,7 +13,7 @@ import { imageExtensions, isTauri, openFile, saveFile, saveFiles } from '../plat
 import { button, el, onResize, Panel } from './controls';
 import type { Ctx } from './context';
 import {
-  bandEditorPanel, bandsPanel, needsRespace, rebuildBands, respace, takePaletteIntoBands,
+  bandEditorPanel, bandsPanel, ensureHighlights, needsRespace, rebuildBands, respace, takePaletteIntoBands,
 } from './bands';
 import { documentPanel, imagePanel, regionsPanel, tracePanel } from './panels';
 import { PRESETS } from './presets';
@@ -94,6 +94,7 @@ export class App {
       pickColour: (done) => this.startPicking(done),
       afterTrace: (fn) => { this.afterTraceQueue.push(fn); },
       rebuildBands: () => rebuildBands(this.ctx),
+      ensureHighlights: () => ensureHighlights(this.ctx),
       takePaletteIntoBands: () => takePaletteIntoBands(this.ctx),
       respace: (rule) => respace(this.ctx, rule),
       sampleGradient: (bandId) =>
@@ -596,7 +597,11 @@ export class App {
       // rather than inside the pipeline keeps the bands' thresholds the single
       // source of truth; the guard means it costs a second pass only when the
       // first one actually landed somewhere else.
-      if (change.global >= Dirty.All && needsRespace(this.ctx)) respace(this.ctx);
+      if (change.global >= Dirty.All) {
+        // A new source may have brought a matte, or taken one away.
+        ensureHighlights(this.ctx);
+        if (needsRespace(this.ctx)) respace(this.ctx);
+      }
 
       // Work that was waiting for this trace — a palette it has just solved.
       const waiting = this.afterTraceQueue.splice(0);
