@@ -188,6 +188,32 @@ const settle = (p) => p.waitForFunction(() => !window.contour.busy() && window.c
   await p.evaluate(() => window.contour.store.updateCanvas({ paper: [1, 1, 1] }));
   await settle(p);
 
+  // Taking the background out: by colour here (no Vision in a browser), then a
+  // polygon, then Restore.
+  const btn = (label) => p.evaluate((l) => [...document.querySelectorAll('button')].find((b) => b.textContent === l).click(), label);
+  const src = () => p.evaluate(() => { const s = window.contour.store.get().source; return { t: !!s.transparent, o: !!s.original, len: s.data.length }; });
+  await btn('Remove background');
+  await p.waitForTimeout(600);
+  await settle(p);
+  const removed = await src();
+  check(46, 'Remove background makes the picture a cut-out and keeps the original', removed.t && removed.o, JSON.stringify(removed));
+  await btn('Cut away inside');
+  await btn('Draw polygon');
+  const sb = await p.locator('.surface').boundingBox();
+  for (const [fx, fy] of [[0.2, 0.2], [0.5, 0.2], [0.35, 0.45]]) await p.mouse.click(sb.x + sb.width * fx, sb.y + sb.height * fy);
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(600);
+  await settle(p);
+  const cut = await src();
+  check(46, 'a polygon cuts into the picture', cut.t && cut.len !== removed.len);
+  await btn('Restore original');
+  await p.waitForTimeout(600);
+  await settle(p);
+  const back = await src();
+  check(46, 'Restore original puts the whole picture back', !back.o && !back.t, JSON.stringify(back));
+  await p.evaluate(() => window.contour.store.updateCanvas({ paper: [1, 1, 1] }));
+  await settle(p);
+
   // 23: the loading bar.
   const bar = await p.evaluate(async () => {
     window.contour.store.updateBanding({ levels: 6 });

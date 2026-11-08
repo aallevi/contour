@@ -10,3 +10,6 @@
 # not ours to publish. The test skips itself when it is missing.
 /artifacts/
 /.attic/
+
+# Built by src-tauri/build.rs (the Vision helper).
+/src-tauri/binaries/

@@ -492,6 +492,60 @@ fn decode_image(path: String, magick_path: Option<String>) -> Result<DecodedImag
 
 /// Extensions worth offering in the open dialog. ImageMagick widens this a lot,
 /// so the list depends on whether it is there.
+// -- subject masks -------------------------------------------------------------
+
+/// The subject of a picture as an 8-bit grey PNG mask, by Apple's Vision.
+///
+/// The body is the picture as PNG; an optional `x-box` header holds four
+/// fractions, `x0 y0 x1 y1`, to keep only the subjects inside that box. The
+/// work is done by `contour-vision`, the Swift helper bundled beside the app's
+/// own executable (see build.rs), so a missing or placeholder helper is an
+/// error the interface can explain rather than a crash.
+#[tauri::command]
+fn vision_subject(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
+    let body = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes,
+        _ => return Err("vision_subject expects a raw body".into()),
+    };
+    let helper = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .with_file_name("contour-vision");
+    if std::fs::metadata(&helper).map(|m| m.len() == 0).unwrap_or(true) {
+        return Err("Background removal needs the desktop app on a Mac".into());
+    }
+    static JOB: AtomicUsize = AtomicUsize::new(0);
+    let n = JOB.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir();
+    let input = tmp.join(format!("contour-vision-{}-{n}-in.png", std::process::id()));
+    let output = tmp.join(format!("contour-vision-{}-{n}-out.png", std::process::id()));
+    std::fs::write(&input, body).map_err(|e| e.to_string())?;
+
+    let mut cmd = Command::new(&helper);
+    cmd.arg(&input).arg(&output);
+    if let Some(b) = request.headers().get("x-box").and_then(|v| v.to_str().ok()) {
+        let parts: Vec<&str> = b.split_whitespace().collect();
+        if parts.len() == 4 && parts.iter().all(|p| p.parse::<f64>().is_ok()) {
+            cmd.args(parts);
+        }
+    }
+    let result = cmd.output();
+    let _ = std::fs::remove_file(&input);
+    let out = result.map_err(|e| format!("could not run the Vision helper: {e}"))?;
+    if !out.status.success() {
+        let _ = std::fs::remove_file(&output);
+        let msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        return Err(match out.status.code() {
+            Some(4) => "No subject found".to_string(),
+            Some(5) => "Background removal needs macOS 14 or later".to_string(),
+            _ if !msg.is_empty() => msg,
+            _ => "Vision could not find the subject".to_string(),
+        });
+    }
+    let png = std::fs::read(&output).map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&output);
+    Ok(tauri::ipc::Response::new(png?))
+}
+
 #[tauri::command]
 fn image_formats() -> Vec<String> {
     let mut v: Vec<String> = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"]
@@ -514,6 +568,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
+            vision_subject,
             probe_tools,
             trace_bands,
             decode_image,

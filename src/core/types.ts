@@ -374,6 +374,12 @@ export type Source = {
   data: string;
   /** The image arrived with a matte — a cut-out rather than a photograph. */
   transparent?: boolean;
+  /**
+   * The picture as it was opened, when its background has since been cut away
+   * in Contour (see cutout/). `data` then holds the cut, with the background
+   * in its alpha; this is what Restore puts back and what Vision looks at.
+   */
+  original?: string;
 };
 
 export type Project = {

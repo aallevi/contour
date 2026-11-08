@@ -2,7 +2,8 @@ import { hexToRgb, lumaOf, rgbToHex } from '../core/color';
 import { nearestPaletteIndex } from '../band/quantize';
 import { Dirty } from '../core/store';
 import { defaultAdjust, identityCurves } from '../core/defaults';
-import type { BandMode, RGB, Tracer, TurnPolicy, VtraceParams } from '../core/types';
+import type { BandMode, RGB, Source, Tracer, TurnPolicy, VtraceParams } from '../core/types';
+import { applyMask, findSubject, polygonMask, restoreOriginal, type Box, type CutOp } from '../cutout';
 import {
   button, buttonRow, colourField, el, field, help, numberInput, Panel,
   segmented, select, slider, toggle,
@@ -215,6 +216,90 @@ export function imagePanel(ctx: Ctx): Panel {
     // The test card is not offered here at all; it lives behind ?testcard.
     button('Open another image…', () => void ctx.openImage()),
   ));
+
+  // -- background
+  //
+  // Three ways to take the background out, each ending in the picture's own
+  // matte (cutout/): the subject found for you, the subject inside a box you
+  // draw, or exactly the shape you click round. Vision does the finding on the
+  // desktop; elsewhere a colour model stands in.
+  const bgBox = el('div', 'subgroup');
+  const bgLab = el('h4');
+  bgLab.textContent = 'Background';
+  bgBox.append(bgLab);
+  let busy = false;
+  const run = async (what: string, job: () => Promise<Source | null>) => {
+    const src = s.get().source;
+    if (!src || busy) return;
+    busy = true;
+    ctx.status(`${what}\u2026`);
+    try {
+      const next = await job();
+      if (next) ctx.replaceSource(next);
+    } catch (err) {
+      ctx.status(`${what} failed: ${(err as Error).message ?? err}`, 'error');
+    } finally {
+      busy = false;
+    }
+  };
+  const subject = (box?: Box) => run(box ? 'Finding the subject in the box' : 'Removing the background', async () => {
+    const src = s.get().source!;
+    const { mask, by } = await findSubject(src, box);
+    const next = await applyMask(src, mask, 'keep');
+    ctx.status(by === 'vision'
+      ? 'Background removed with Apple Vision \u2014 paper set to none'
+      : 'Background removed by colour \u2014 paper set to none. For a busy background, draw a polygon instead.');
+    return next;
+  });
+  const removeBtn = button('Remove background', () => void subject(), {
+    title: 'Find the subject and clear everything else (Apple Vision in the desktop app)',
+  });
+  const boxBtn = button('Subject in a box', () => {
+    const src = s.get().source;
+    if (!src) return;
+    ctx.drawShape('box', ([[x0, y0], [x1, y1]]) =>
+      void subject([x0 / src.width, y0 / src.height, x1 / src.width, y1 / src.height]));
+  }, { title: 'Drag a box round the subject; only what is in it is kept' });
+  bgBox.append(buttonRow(removeBtn, boxBtn));
+
+  let polyOp: CutOp = 'keep';
+  bgBox.append(segmented(p, {
+    label: 'Polygon',
+    options: [
+      { value: 'keep', label: 'Keep inside', title: 'Everything outside the shape becomes background' },
+      { value: 'remove', label: 'Cut away inside', title: 'The inside of the shape becomes background' },
+    ],
+    get: () => polyOp,
+    set: (v) => { polyOp = v as CutOp; },
+  }));
+  const polyBtn = button('Draw polygon', () => {
+    const src = s.get().source;
+    if (!src) return;
+    const op = polyOp;
+    ctx.drawShape('polygon', (points) => void run('Cutting the polygon', async () => {
+      const cur = s.get().source!;
+      const next = await applyMask(cur, polygonMask(cur.width, cur.height, points), op);
+      ctx.status(op === 'keep' ? 'Kept the inside of the polygon' : 'Cut away the inside of the polygon');
+      return next;
+    }));
+  }, { title: 'Click round a shape on the picture' });
+  const restoreBtn = button('Restore original', () => void run('Restoring', async () => {
+    const next = await restoreOriginal(s.get().source!);
+    ctx.status('The picture is back as it was opened');
+    return next;
+  }), { title: 'Undo every cut and put the whole picture back' });
+  bgBox.append(buttonRow(polyBtn, restoreBtn));
+  bgBox.append(help(
+    'Each cut only ever removes, so they add up: remove the background, then ' +
+    'cut away a stray piece with a polygon. The picture as you opened it is ' +
+    'kept with the document, and Restore original brings it back.',
+  ));
+  p.body.append(bgBox);
+  p.onSync(() => {
+    const src = s.get().source;
+    for (const b of [removeBtn, boxBtn, polyBtn]) b.disabled = !src;
+    restoreBtn.disabled = !src?.original;
+  });
 
   p.add(slider(p, {
     label: 'Exposure', min: -3, max: 3, step: 0.01, unit: ' EV',

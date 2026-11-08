@@ -1,6 +1,6 @@
 import type { Store } from '../core/store';
 import type { Engine } from '../pipeline/engine';
-import type { FreePoint, GradientStop, Spacing } from '../core/types';
+import type { FreePoint, GradientStop, Spacing, Source } from '../core/types';
 
 /**
  * What every panel is handed.
@@ -22,6 +22,13 @@ export type Ctx = {
   openImage(): Promise<void>;
   /** The next click on the picture samples it there and hands the colour over. */
   pickColour(done: (rgb: [number, number, number]) => void): void;
+  /**
+   * Draw a box or a polygon on the stage. `done` gets its points in source
+   * pixels (a box as its two corners), or is never called if Esc cancels.
+   */
+  drawShape(kind: 'box' | 'polygon', done: (points: [number, number][]) => void): void;
+  /** Swap in an edited picture, keeping the document's size and settings. */
+  replaceSource(source: Source): void;
   /**
    * Run once the next trace has landed. A colour palette is solved inside the
    * trace, so anything built from it has to wait for one.

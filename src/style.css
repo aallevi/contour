@@ -1202,3 +1202,20 @@ body {
   user-select: none;
 }
 input, textarea, .help, .source-name { -webkit-user-select: text; user-select: text; }
+
+/* -- drawing a box or polygon on the picture ------------------------------ */
+
+.shape-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.stage.drawing-shape { cursor: crosshair; }
+.shape-halo { fill: none; stroke: rgba(0, 0, 0, 0.6); stroke-width: 3; }
+.shape-line { fill: rgba(244, 196, 48, 0.12); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; }
+polyline.shape-line { fill: none; }
+.shape-dot { fill: var(--accent); stroke: #000; stroke-width: 1; }
+.shape-dot.first { fill: #fff; }

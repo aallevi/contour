@@ -39,6 +39,8 @@ function context(): Ctx {
     openImage: async () => {},
     pickColour: () => {},
     ensureLightest: () => {},
+    drawShape: () => {},
+    replaceSource: () => {},
     afterTrace: () => {},
     rebuildBands: () => {},
     takePaletteIntoBands: () => {},

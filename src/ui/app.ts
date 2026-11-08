@@ -92,6 +92,8 @@ export class App {
       status: (m, kind) => this.setStatus(m, kind),
       openImage: () => this.openImage(),
       pickColour: (done) => this.startPicking(done),
+      drawShape: (kind, done) => this.startShape(kind, done),
+      replaceSource: (source) => this.replaceSource(source),
       afterTrace: (fn) => { this.afterTraceQueue.push(fn); },
       rebuildBands: () => rebuildBands(this.ctx),
       ensureLightest: () => ensureLightest(this.ctx),
@@ -299,6 +301,9 @@ export class App {
     this.splitEl = el('div', 'split-handle');
     this.splitEl.append(el('span', 'split-grip'));
     this.stage.append(this.splitEl);
+    this.shapeEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.shapeEl.classList.add('shape-overlay');
+    this.stage.append(this.shapeEl);
 
     this.busyEl = el('div', 'progress');
     const fill = el('div', 'progress-fill');
@@ -419,12 +424,17 @@ export class App {
         this.pickAt(e.clientX, e.clientY);
         return;
       }
+      if (this.shape) {
+        this.shapeDown(e);
+        return;
+      }
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       this.stage.setPointerCapture(e.pointerId);
       this.stage.classList.add('panning');
       pinch = pointers.size === 2 ? spread() : null;
     });
     this.stage.addEventListener('pointermove', (e) => {
+      if (this.shape) this.shapeMove(e);
       const p = pointers.get(e.pointerId);
       if (!p) return;
       const dx = e.clientX - p.x;
@@ -447,6 +457,7 @@ export class App {
       this.applyTransform();
     });
     const stop = (e: PointerEvent) => {
+      if (this.shape) this.shapeUp(e);
       pointers.delete(e.pointerId);
       // Lifting one finger of a pinch leaves the other panning from where it is.
       pinch = null;
@@ -520,6 +531,7 @@ export class App {
     this.statusEl.dataset.zoom = `${pct}%`;
     this.applySplit();
     this.overlay.render();
+    this.renderShape();
     this.renderStatus();
   }
 
@@ -906,6 +918,159 @@ export class App {
     if (n) done([r / n / 255, g / n / 255, b / n / 255]);
   }
 
+  // -- drawing a box or a polygon on the picture --------------------------------
+
+  private shapeEl!: SVGSVGElement;
+  /** While set, presses on the stage draw this shape instead of panning. Points in canvas pixels. */
+  private shape: {
+    kind: 'box' | 'polygon';
+    done: (points: [number, number][]) => void;
+    points: [number, number][];
+    hover: [number, number] | null;
+    dragging: boolean;
+  } | null = null;
+
+  private startShape(kind: 'box' | 'polygon', done: (points: [number, number][]) => void): void {
+    if (!this.store.get().source) return;
+    this.stopPicking();
+    this.shape = { kind, done, points: [], hover: null, dragging: false };
+    this.stage.classList.add('drawing-shape');
+    if (this.view !== 'photo') {
+      // You are outlining the photograph, so show it.
+      this.view = 'photo';
+      this.applyView();
+    }
+    this.setStatus(kind === 'box'
+      ? 'Drag a box around the subject \u2014 Esc to cancel'
+      : 'Click round the shape; click the first point or press Enter to close \u2014 Backspace undoes a point, Esc cancels');
+    this.renderShape();
+  }
+
+  private stopShape(message?: string): void {
+    this.shape = null;
+    this.stage.classList.remove('drawing-shape');
+    this.renderShape();
+    if (message) this.setStatus(message);
+  }
+
+  private toCanvas(e: PointerEvent): [number, number] {
+    const rect = this.stage.getBoundingClientRect();
+    const { width, height } = this.store.get().canvas;
+    const x = (e.clientX - rect.left - this.panX) / this.zoom;
+    const y = (e.clientY - rect.top - this.panY) / this.zoom;
+    return [Math.min(width, Math.max(0, x)), Math.min(height, Math.max(0, y))];
+  }
+
+  private shapeDown(e: PointerEvent): void {
+    const s = this.shape!;
+    const at = this.toCanvas(e);
+    if (s.kind === 'box') {
+      s.points = [at, at];
+      s.dragging = true;
+      this.stage.setPointerCapture(e.pointerId);
+    } else {
+      const first = s.points[0];
+      // Close on the first point, judged in screen pixels so it is as easy at any zoom.
+      if (first && s.points.length >= 3 && Math.hypot(first[0] - at[0], first[1] - at[1]) * this.zoom < 10) {
+        this.finishShape();
+        return;
+      }
+      s.points.push(at);
+    }
+    this.renderShape();
+  }
+
+  private shapeMove(e: PointerEvent): void {
+    const s = this.shape!;
+    const at = this.toCanvas(e);
+    if (s.kind === 'box' && s.dragging) s.points[1] = at;
+    else s.hover = at;
+    this.renderShape();
+  }
+
+  private shapeUp(_e: PointerEvent): void {
+    const s = this.shape!;
+    if (s.kind !== 'box' || !s.dragging) return;
+    s.dragging = false;
+    const [[ax, ay], [bx, by]] = s.points;
+    if (Math.abs(ax - bx) * this.zoom < 6 || Math.abs(ay - by) * this.zoom < 6) {
+      s.points = [];
+      this.renderShape();
+      return;
+    }
+    this.finishShape();
+  }
+
+  private finishShape(): void {
+    const s = this.shape;
+    const source = this.store.get().source;
+    if (!s || !source) return this.stopShape();
+    if (s.kind === 'polygon' && s.points.length < 3) return;
+    const { width, height } = this.store.get().canvas;
+    let pts = s.points;
+    if (s.kind === 'box') {
+      const [[ax, ay], [bx, by]] = pts;
+      pts = [[Math.min(ax, bx), Math.min(ay, by)], [Math.max(ax, bx), Math.max(ay, by)]];
+    }
+    const toSource = pts.map(([x, y]) => [x / width * source.width, y / height * source.height] as [number, number]);
+    const done = s.done;
+    this.stopShape();
+    done(toSource);
+  }
+
+  private renderShape(): void {
+    const el = this.shapeEl;
+    if (!el) return;
+    const s = this.shape;
+    if (!s || !s.points.length && !s.hover) {
+      el.replaceChildren();
+      return;
+    }
+    const sx = (p: [number, number]) => `${(p[0] * this.zoom + this.panX).toFixed(1)},${(p[1] * this.zoom + this.panY).toFixed(1)}`;
+    const ns = 'http://www.w3.org/2000/svg';
+    const nodes: SVGElement[] = [];
+    const line = (pts: [number, number][], closed: boolean) => {
+      for (const cls of ['shape-halo', 'shape-line']) {
+        const n = document.createElementNS(ns, closed ? 'polygon' : 'polyline');
+        n.setAttribute('points', pts.map(sx).join(' '));
+        n.setAttribute('class', cls);
+        nodes.push(n);
+      }
+    };
+    if (s.kind === 'box' && s.points.length === 2) {
+      const [[ax, ay], [bx, by]] = s.points;
+      line([[ax, ay], [bx, ay], [bx, by], [ax, by]], true);
+    } else if (s.kind === 'polygon') {
+      line(s.hover ? [...s.points, s.hover] : s.points, false);
+      s.points.forEach((p, i) => {
+        const c = document.createElementNS(ns, 'circle');
+        const [x, y] = sx(p).split(',');
+        c.setAttribute('cx', x);
+        c.setAttribute('cy', y);
+        c.setAttribute('r', i === 0 && s.points.length >= 3 ? '6' : '3.5');
+        c.setAttribute('class', i === 0 ? 'shape-dot first' : 'shape-dot');
+        nodes.push(c);
+      });
+    }
+    el.replaceChildren(...nodes);
+  }
+
+  /**
+   * An edited picture in place of the current one: the same document, the
+   * same size and bands, only the matte changed. A cut makes the ground clear,
+   * so the paper goes to None as it does when a cut-out is opened.
+   */
+  private replaceSource(source: Source): void {
+    const c = this.store.get().canvas;
+    if (source.transparent && c.paper !== null) this.store.updateCanvas({ paper: null }, 'canvas:paper');
+    this.store.setSource(source);
+    this.applySourceState();
+    if (this.view === 'photo') {
+      this.view = 'drawing';
+      this.applyView();
+    }
+  }
+
   // -- input -----------------------------------------------------------------
 
   private wireKeyboard(): void {
@@ -934,6 +1099,13 @@ export class App {
         this.fit();
       } else if (e.key === 'Escape' && this.picking) {
         this.stopPicking('Picking cancelled');
+      } else if (this.shape && e.key === 'Escape') {
+        this.stopShape('Selection cancelled');
+      } else if (this.shape?.kind === 'polygon' && e.key === 'Enter') {
+        this.finishShape();
+      } else if (this.shape?.kind === 'polygon' && e.key === 'Backspace') {
+        this.shape.points.pop();
+        this.renderShape();
       } else if (e.key === 'Tab') {
         e.preventDefault();
         const order = ['drawing', 'photo', 'split', 'under'] as const;

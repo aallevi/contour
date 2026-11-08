@@ -98,17 +98,23 @@ npm run install-app      # macOS: build and copy into /Applications (add -- --la
    how many, where they cut) → *Trace* → *Bands* → the selected *Band*'s fill
    and outline. A setting only affects the panels below it, and each panel's
    (i) explains it.
-5. **Compare** beside *Fit*: *Original*, *Split* (drag the divider), or *Under*
+5. **Take out the background** if you want a cut-out (*Image → Background*):
+   *Remove background* finds the subject, *Subject in a box* keeps only what
+   is in a box you drag, and *Draw polygon* keeps or cuts away exactly the
+   shape you click round. In the desktop app on macOS 14 or later the subject
+   is found by Apple Vision, the same as Preview's Remove Background; in a
+   browser, by colour. Cuts add up, and *Restore original* undoes them all.
+6. **Compare** beside *Fit*: *Original*, *Split* (drag the divider), or *Under*
    to see the photograph faintly through the paper. It is only a view and never
    appears in an export.
-6. **Your colours.** Click the scissors mark, top left, to recolour the
+7. **Your colours.** Click the scissors mark, top left, to recolour the
    interface: *Fill*, *Lines* and *Text*, each from a grid of little squares or a
    fluid *Spectrum* swatch, then a saturation and brightness field with hue and *Vivid* (Display P3) sliders.
    *Background* sets the stage behind the sheet to *Grid*, *Squares* or
    *Marbled* (little squares combed like marbled paper); *Reset* brings back
    the green. With the paper set to *None* the sheet is see-through, with a thin
    line marking its edge, and the background shows behind the drawing.
-7. **Export** to PNG, SVG or PDF, or *Plates* for screen printing. While a
+8. **Export** to PNG, SVG or PDF, or *Plates* for screen printing. While a
    change retraces, a bar along the top of the stage says so, over the last
    drawing.
 
