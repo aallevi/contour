@@ -12,7 +12,7 @@ import { exportCompactSVG, exportSVGZ, exportWebP } from '../export/light';
 type ExportKind = 'svg' | 'pdf' | 'png' | 'compact' | 'svgz' | 'webp';
 import { sceneWeight } from '../render/scene';
 import { exportPlates, planPlates } from '../export/plates';
-import { imageExtensions, isTauri, openFile, saveFile, saveFiles } from '../platform';
+import { imageExtensions, isTauri, openFile, readPath, saveFile, saveFiles } from '../platform';
 import { button, el, onResize, Panel } from './controls';
 import type { Ctx } from './context';
 import {
@@ -1189,6 +1189,13 @@ export class App {
   }
 
   private wireDrop(): void {
+    // The desktop window keeps `dragDropEnabled`, which hands every drag to the
+    // native side: no `dragover` or `drop` ever reaches the page there. Drops
+    // arrive by path instead, which also lets a TIFF reach the native decoder.
+    if (isTauri()) {
+      void this.bindNativeDrop();
+      return;
+    }
     const stop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -1202,24 +1209,84 @@ export class App {
     window.addEventListener('drop', (e) => {
       stop(e);
       this.stage.classList.remove('drop');
-      const file = e.dataTransfer?.files?.[0];
-      if (!file) return;
+      const dt = e.dataTransfer;
+      if (!dt) return;
       void (async () => {
         try {
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          if (/\.contour(\.json)?$|\.json$/.test(file.name)) {
-            this.openDocument(file.name, bytes);
-          } else {
-            const img = await loadImage(bytes);
-            this.adoptSource(await embedSource(img, file.name));
-            this.setStatus(`Opened ${file.name}`);
+          const file = await droppedFile(dt);
+          if (!file) {
+            this.setStatus('That drop carried no file', 'error');
+            return;
           }
+          await this.openDropped(file.name, file.bytes);
         } catch (err) {
           this.setStatus((err as Error).message, 'error');
         }
       })();
     });
   }
+
+  private async bindNativeDrop(): Promise<void> {
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+    await getCurrentWebview().onDragDropEvent((event) => {
+      const p = event.payload;
+      if (p.type === 'enter' || p.type === 'over') this.stage.classList.add('drop');
+      else if (p.type === 'leave') this.stage.classList.remove('drop');
+      else if (p.type === 'drop') {
+        this.stage.classList.remove('drop');
+        // wry reads only file names off the pasteboard; a drop of a link or a
+        // file promise arrives here empty, and should say so.
+        const path = p.paths[0];
+        if (!path) {
+          this.setStatus('That drop carried no file', 'error');
+          return;
+        }
+        void (async () => {
+          try {
+            const bytes = await readPath(path);
+            await this.openDropped(path.split('/').pop() ?? path, bytes, path);
+          } catch (err) {
+            this.setStatus((err as Error).message, 'error');
+          }
+        })();
+      }
+    });
+  }
+
+  /** A document opens as a document and anything else as the picture, wherever it lands. */
+  private async openDropped(name: string, bytes: Uint8Array, path?: string): Promise<void> {
+    if (/\.contour(\.json)?$|\.json$/i.test(name)) {
+      this.openDocument(name, bytes);
+      return;
+    }
+    const img = await loadImage(bytes, path);
+    this.adoptSource(await embedSource(img, name));
+    this.setStatus(`Opened ${name}`);
+  }
+}
+
+/**
+ * A browser drop from the Finder carries a file; one from another tab or a web
+ * page carries a link, or an `<img>` in HTML. Try each in turn.
+ */
+async function droppedFile(dt: DataTransfer): Promise<{ name: string; bytes: Uint8Array } | null> {
+  const asFile = dt.files?.[0]
+    ?? Array.from(dt.items ?? []).find((i) => i.kind === 'file')?.getAsFile()
+    ?? null;
+  if (asFile) return { name: asFile.name, bytes: new Uint8Array(await asFile.arrayBuffer()) };
+
+  const html = dt.getData('text/html');
+  const fromHtml = html
+    ? new DOMParser().parseFromString(html, 'text/html').querySelector('img')?.getAttribute('src')
+    : null;
+  const fromList = dt.getData('text/uri-list').split(/\r?\n/).find((l) => l && !l.startsWith('#'));
+  const url = fromHtml || fromList;
+  if (!url || !/^(https?:|data:|blob:)/i.test(url)) return null;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not fetch the dropped picture (${res.status})`);
+  const name = url.startsWith('data:') ? 'Dropped picture' : decodeURIComponent(new URL(url).pathname.split('/').pop() || 'Dropped picture');
+  return { name, bytes: new Uint8Array(await res.arrayBuffer()) };
 }
 
 function mergeChange(a: Change, b: Change): Change {

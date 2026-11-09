@@ -320,17 +320,8 @@ export function curveEditor(host: SyncHost, o: CurveEditorOptions): HTMLElement 
     // Histogram behind everything, on a square root scale: a linear one is all
     // spike and no shoulder on any real photograph, and the shoulder is the
     // part you are aiming at.
-    const hist = o.histogram();
-    let peak = 0;
-    for (const v of hist) peak = Math.max(peak, v);
-    if (peak > 0) {
-      g.fillStyle = 'rgba(255,255,255,0.10)';
-      const bw = w / hist.length;
-      for (let i = 0; i < hist.length; i++) {
-        const v = Math.sqrt(hist[i] / peak) * ph;
-        g.fillRect(i * bw, ph - v, Math.ceil(bw), v);
-      }
-    }
+    g.fillStyle = 'rgba(255,255,255,0.10)';
+    paintHistogram(g, o.histogram(), w, ph, ratio);
 
     g.strokeStyle = 'rgba(255,255,255,0.10)';
     g.lineWidth = 1 * ratio;
@@ -387,12 +378,14 @@ export function curveEditor(host: SyncHost, o: CurveEditorOptions): HTMLElement 
     g.stroke();
 
     for (let i = 0; i < points.length; i++) {
-      const px = points[i].x * w;
-      const py = (1 - points[i].y) * ph;
       const on = i === selected;
       const near = i === hovered;
+      const r = (on ? 6 : near ? 5.5 : 4.5) * ratio;
+      // The end points sit on the edges; draw them inside, keep their value.
+      const px = inside(points[i].x * w, r, w);
+      const py = inside((1 - points[i].y) * ph, r, ph);
       g.beginPath();
-      g.arc(px, py, (on ? 6 : near ? 5.5 : 4.5) * ratio, 0, Math.PI * 2);
+      g.arc(px, py, r, 0, Math.PI * 2);
       g.fillStyle = on ? '#ffffff' : CHANNEL_INK[channel];
       g.fill();
       g.strokeStyle = on ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.55)';
@@ -428,7 +421,7 @@ export function curveEditor(host: SyncHost, o: CurveEditorOptions): HTMLElement 
 
     const mid = l.inBlack + (l.inWhite - l.inBlack) * gammaToPosition(l.gamma);
     const marker = (at: number, fill: string, size: number) => {
-      const x = at * w;
+      const x = inside(at * w, size * ratio, w);
       const cy = top + height / 2;
       g.beginPath();
       g.moveTo(x, top);
@@ -456,6 +449,44 @@ export function curveEditor(host: SyncHost, o: CurveEditorOptions): HTMLElement 
 }
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/** Where to draw a handle of radius `r` so it is not cut off by an edge. */
+const inside = (x: number, r: number, size: number): number => Math.min(size - r, Math.max(r, x));
+
+/**
+ * A 256-bin histogram on a square-root scale, filling the strip `0..w` up from
+ * `base`. Drawn bin for bin into a strip that is not a whole multiple of 256
+ * pixels, it aliases into a comb, so it is rebinned first to about one bar per
+ * 3 CSS pixels.
+ */
+function paintHistogram(
+  g: CanvasRenderingContext2D,
+  hist: Uint32Array,
+  w: number,
+  base: number,
+  ratio: number,
+): void {
+  const bars = Math.max(1, Math.min(hist.length, Math.round(w / (3 * ratio))));
+  // Averaged, not summed: bars that take two bins and bars that take three
+  // would otherwise make a comb of their own.
+  const sums = new Float64Array(bars);
+  const counts = new Uint16Array(bars);
+  for (let i = 0; i < hist.length; i++) {
+    const k = Math.floor((i * bars) / hist.length);
+    sums[k] += hist[i];
+    counts[k]++;
+  }
+  for (let i = 0; i < bars; i++) sums[i] /= Math.max(1, counts[i]);
+  let peak = 0;
+  for (const v of sums) peak = Math.max(peak, v);
+  if (peak <= 0) return;
+  for (let i = 0; i < bars; i++) {
+    const x0 = Math.round((i * w) / bars);
+    const x1 = Math.round(((i + 1) * w) / bars);
+    const v = Math.sqrt(sums[i] / peak) * base;
+    g.fillRect(x0, base - v, x1 - x0, v);
+  }
+}
 const b255 = (v: number): string => String(Math.round(clamp01(v) * 255));
 
 /** The point in `points` whose x is closest to `x`, for re-finding a dragged handle. */
@@ -574,17 +605,8 @@ export function thresholdStrip(host: SyncHost, o: ThresholdStripOptions): HTMLEl
       g.fillRect(edges[i] * w, 0, (edges[i + 1] - edges[i]) * w, h);
     }
 
-    const hist = o.histogram();
-    let peak = 0;
-    for (const v of hist) peak = Math.max(peak, v);
-    if (peak > 0) {
-      g.fillStyle = 'rgba(0,0,0,0.30)';
-      const bw = w / hist.length;
-      for (let i = 0; i < hist.length; i++) {
-        const v = Math.sqrt(hist[i] / peak) * h;
-        g.fillRect(i * bw, h - v, Math.ceil(bw), v);
-      }
-    }
+    g.fillStyle = 'rgba(0,0,0,0.30)';
+    paintHistogram(g, o.histogram(), w, h, ratio);
 
     const on = o.enabled();
     for (const t of ts) {
@@ -597,7 +619,7 @@ export function thresholdStrip(host: SyncHost, o: ThresholdStripOptions): HTMLEl
       if (on) {
         g.fillStyle = '#ffffff';
         g.beginPath();
-        g.arc(t * w, h - 5 * ratio, 3.5 * ratio, 0, Math.PI * 2);
+        g.arc(inside(t * w, 3.5 * ratio, w), h - 5 * ratio, 3.5 * ratio, 0, Math.PI * 2);
         g.fill();
       }
     }

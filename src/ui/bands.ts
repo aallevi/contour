@@ -25,6 +25,65 @@ export function bandsPanel(ctx: Ctx): Panel {
   const p = new Panel('Bands');
   const list = el('div', 'band-list');
   p.body.append(list);
+
+  // Rows reorder with pointer events, not HTML5 drag: the desktop window hands
+  // every HTML5 drag to its native file drop, so `dragover` and `drop` never
+  // reach the page there.
+  const reorder = { justDropped: false };
+  const beginReorder = (e: PointerEvent, row: HTMLElement, id: string, from: number): void => {
+    if (e.button !== 0 || (e.target as Element).closest('button, input')) return;
+    reorder.justDropped = false;
+    const startY = e.clientY;
+    let dragging = false;
+    let gap = -1;
+    let marked: HTMLElement | null = null;
+    const mark = (target: HTMLElement | null, after: boolean) => {
+      marked?.classList.remove('drop-target', 'drop-after');
+      marked = target;
+      target?.classList.add(after ? 'drop-after' : 'drop-target');
+    };
+    const move = (ev: PointerEvent) => {
+      if (!dragging) {
+        // A few pixels of travel before it is a drag, so a click stays a click.
+        if (Math.abs(ev.clientY - startY) < 4) return;
+        dragging = true;
+        row.setPointerCapture(ev.pointerId);
+        row.classList.add('dragging');
+      }
+      const rows = Array.from(list.querySelectorAll<HTMLElement>('.band-row[data-index]:not([hidden])'));
+      let target = rows[rows.length - 1];
+      let after = true;
+      for (const r of rows) {
+        const box = r.getBoundingClientRect();
+        if (ev.clientY < box.bottom) {
+          target = r;
+          after = ev.clientY > box.top + box.height / 2;
+          break;
+        }
+      }
+      if (!target) return;
+      gap = Number(target.dataset.index) + (after ? 1 : 0);
+      mark(target, after);
+    };
+    const end = (ev: PointerEvent) => {
+      row.removeEventListener('pointermove', move);
+      row.removeEventListener('pointerup', end);
+      row.removeEventListener('pointercancel', end);
+      row.classList.remove('dragging');
+      mark(null, false);
+      if (!dragging) return;
+      // The click that follows this pointerup belongs to the drag.
+      reorder.justDropped = true;
+      setTimeout(() => { reorder.justDropped = false; }, 0);
+      if (ev.type === 'pointerup' && gap >= 0) {
+        const to = gap > from ? gap - 1 : gap;
+        if (to !== from) ctx.store.moveBand(id, to);
+      }
+    };
+    row.addEventListener('pointermove', move);
+    row.addEventListener('pointerup', end);
+    row.addEventListener('pointercancel', end);
+  };
   // The paper is the bottom layer of every drawing, so it sits at the foot of
   // the stack as one: a colour you can change here, or None.
   const paperRow = el('div', 'band-row paper-row');
@@ -205,7 +264,7 @@ export function bandsPanel(ctx: Ctx): Panel {
       if (band.group && collapsed.has(band.group)) row.hidden = true;
       if (chosen.has(band.id)) row.classList.add('selected');
       if (band.id === selected) row.classList.add('primary');
-      row.draggable = true;
+      row.dataset.index = String(index);
 
       const eye = el('button', 'band-eye');
       eye.type = 'button';
@@ -242,27 +301,14 @@ export function bandsPanel(ctx: Ctx): Panel {
       }
 
       row.append(eye, swatch, name, meta);
-      row.addEventListener('click', (e) => ctx.selectBand(
-        band.id,
-        e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'only',
-      ));
-
-      row.addEventListener('dragstart', (e) => {
-        e.dataTransfer?.setData('text/plain', String(index));
-        row.classList.add('dragging');
+      row.addEventListener('click', (e) => {
+        if (reorder.justDropped) return;
+        ctx.selectBand(
+          band.id,
+          e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'only',
+        );
       });
-      row.addEventListener('dragend', () => row.classList.remove('dragging'));
-      row.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        row.classList.add('drop-target');
-      });
-      row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
-      row.addEventListener('drop', (e) => {
-        e.preventDefault();
-        row.classList.remove('drop-target');
-        const from = Number(e.dataTransfer?.getData('text/plain'));
-        if (Number.isFinite(from)) ctx.store.moveBand(project.bands[from].id, index);
-      });
+      row.addEventListener('pointerdown', (e) => beginReorder(e, row, band.id, index));
 
       list.append(row);
     });

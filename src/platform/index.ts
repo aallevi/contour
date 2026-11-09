@@ -52,6 +52,11 @@ export async function decodeNative(
   return { width: res.width, height: res.height, rgba: new Uint8Array(res.rgba) };
 }
 
+/** Read a file the desktop app was handed by path, as a native drop is. */
+export async function readPath(path: string): Promise<Uint8Array> {
+  return (await fs()).readFile(path);
+}
+
 /** Browser fallback: a transient `<input type=file>`. */
 function browserPick(accept: string): Promise<PickedFile[]> {
   return new Promise((resolve) => {
