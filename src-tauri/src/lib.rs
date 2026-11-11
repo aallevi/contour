@@ -580,7 +580,7 @@ fn vision_subject(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Respon
 
 #[tauri::command]
 fn image_formats() -> Vec<String> {
-    let mut v: Vec<String> = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"]
+    let mut v: Vec<String> = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "jxl"]
         .iter()
         .map(|s| s.to_string())
         .collect();

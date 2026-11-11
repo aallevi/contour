@@ -1,5 +1,6 @@
 import { decodeNative, isTauri } from '../platform';
 import type { Source } from '../core/types';
+import { decodeJXL, isJXL } from './jxl';
 
 /**
  * Getting pixels out of a file.
@@ -38,8 +39,17 @@ export async function loadImage(
   bytes: Uint8Array,
   path?: string,
 ): Promise<LoadedImage> {
-  const direct = await fromBytes(bytes);
+  // Judged by content, never by name: a `.JXL` off a phone can be a JPEG, and
+  // a JXL can arrive under any name or none (a drop from another app).
+  const jxl = isJXL(bytes);
+  const direct = await fromBytes(bytes, jxl ? 'image/jxl' : undefined);
   if (direct) return direct;
+
+  if (jxl) {
+    const data = await decodeJXL(bytes);
+    const bitmap = await createImageBitmap(data, BITMAP_OPTS);
+    return { bitmap, width: bitmap.width, height: bitmap.height };
+  }
 
   if (isTauri() && path) {
     const native = await decodeNative(path);

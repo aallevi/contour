@@ -1,4 +1,5 @@
 import type { Scene } from '../core/types';
+import { encodeJXL } from '../image/jxl';
 import { isTauri } from '../platform';
 import { renderRGBA } from './png';
 import { exportSVG } from './svg';
@@ -13,6 +14,8 @@ import { exportSVG } from './svg';
  *   Inkscape open directly.
  * - WebP is the drawing as pixels, lossless, so flat colour stays flat with no
  *   JPEG smudge around every edge, at a fraction of a PNG's size.
+ * - JPEG XL is the same pixels, lossless, smaller again than WebP, and with the
+ *   transparency of a paperless document kept exactly.
  */
 
 const hex2 = (n: number): string => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
@@ -67,4 +70,17 @@ export async function exportWebP(scene: Scene): Promise<Uint8Array> {
     return new Uint8Array(out);
   }
   throw new Error('this browser cannot write WebP — try Chrome, Firefox or the desktop app');
+}
+
+/**
+ * Lossless JPEG XL at the document's pixel size.
+ *
+ * No browser canvas encodes JXL, so libjxl does it, in wasm, everywhere. The
+ * pixels are read back unpremultiplied, so a transparent sheet's soft edges
+ * survive the trip rather than darkening.
+ */
+export async function exportJXL(scene: Scene): Promise<Uint8Array> {
+  const { canvas, width, height } = await renderRGBA(scene, 1);
+  const data = canvas.getContext('2d')!.getImageData(0, 0, width, height);
+  return encodeJXL(data);
 }

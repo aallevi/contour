@@ -29,7 +29,7 @@ export type PickedFile = { name: string; bytes: Uint8Array; path?: string };
 
 /** Formats the open dialog should offer. ImageMagick widens this considerably. */
 export async function imageExtensions(): Promise<string[]> {
-  const web = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'];
+  const web = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'jxl'];
   if (!isTauri()) return web;
   try {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -130,6 +130,7 @@ function mimeFor(name: string): string {
   if (name.endsWith('.svg')) return 'image/svg+xml';
   if (name.endsWith('.pdf')) return 'application/pdf';
   if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.jxl')) return 'image/jxl';
   if (name.endsWith('.webp')) return 'image/webp';
   if (name.endsWith('.svgz')) return 'image/svg+xml';
   if (name.endsWith('.contour') || name.endsWith('.json')) return 'application/json';

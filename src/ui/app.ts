@@ -7,9 +7,9 @@ import { testCard } from '../image/testcard';
 import { exportSVG } from '../export/svg';
 import { exportPDF } from '../export/pdf';
 import { exportPNG } from '../export/png';
-import { exportCompactSVG, exportSVGZ, exportWebP } from '../export/light';
+import { exportCompactSVG, exportJXL, exportSVGZ, exportWebP } from '../export/light';
 
-type ExportKind = 'svg' | 'pdf' | 'png' | 'compact' | 'svgz' | 'webp';
+type ExportKind = 'svg' | 'pdf' | 'png' | 'compact' | 'svgz' | 'webp' | 'jxl';
 import { sceneWeight } from '../render/scene';
 import { exportPlates, planPlates } from '../export/plates';
 import { imageExtensions, isTauri, openFile, readPath, saveFile, saveFiles } from '../platform';
@@ -300,11 +300,12 @@ export class App {
     // The light formats, one menu rather than three more buttons.
     const light = el('select', 'select light-select');
     light.setAttribute('aria-label', 'More export formats');
-    light.title = 'Lighter files: compact SVG, SVGZ, lossless WebP';
+    light.title = 'Lighter files: compact SVG, SVGZ, lossless WebP and JPEG XL';
     const lightEntries: [ExportKind, string][] = [
       ['compact', 'Compact SVG \u2014 same vector, tighter'],
       ['svgz', 'SVGZ \u2014 gzipped, the lightest vector'],
       ['webp', 'WebP \u2014 lossless, far lighter than PNG'],
+      ['jxl', 'JPEG XL \u2014 lossless, lighter still, keeps transparency'],
     ];
     light.append(new Option('More\u2026', ''));
     for (const [v, label] of lightEntries) light.append(new Option(label, v));
@@ -375,7 +376,7 @@ export class App {
     const dzTitle = el('p', 'drop-zone-title');
     dzTitle.textContent = 'Drop an image here';
     const dzHint = el('p', 'drop-zone-hint');
-    dzHint.textContent = 'PNG, JPEG, WebP or GIF. It stays on your device.';
+    dzHint.textContent = 'PNG, JPEG, WebP, JPEG XL or GIF. It stays on your device.';
     dzInner.append(dzTitle, button('Open image\u2026', () => void this.openImage()), dzHint);
     this.dropZone.append(dzInner);
     this.stage.append(this.dropZone);
@@ -881,6 +882,11 @@ export class App {
         const bytes = await exportWebP(this.scene);
         const ok = await saveFile(bytes, 'drawing.webp', [{ name: 'WebP', extensions: ['webp'] }]);
         if (ok) this.setStatus(`Exported WebP \u2014 ${kb(bytes.length)}, lossless`);
+      } else if (kind === 'jxl') {
+        this.setStatus('Encoding JPEG XL\u2026');
+        const bytes = await exportJXL(this.scene);
+        const ok = await saveFile(bytes, 'drawing.jxl', [{ name: 'JPEG XL', extensions: ['jxl'] }]);
+        if (ok) this.setStatus(`Exported JPEG XL \u2014 ${kb(bytes.length)}, lossless`);
       } else if (kind === 'svg') {
         const text = exportSVG(this.scene);
         const ok = await saveFile(text, 'drawing.svg', [{ name: 'SVG', extensions: ['svg'] }]);
@@ -914,6 +920,7 @@ export class App {
       ['compact', 'Compact SVG \u2014 the same vector, rounded and tightened', () => void this.exportFile('compact')],
       ['svgz', 'SVGZ \u2014 compact SVG, gzipped: the lightest vector', () => void this.exportFile('svgz')],
       ['webp', 'WebP \u2014 lossless pixels, far lighter than PNG', () => void this.exportFile('webp')],
+      ['jxl', 'JPEG XL \u2014 lossless pixels, lighter still, keeps transparency', () => void this.exportFile('jxl')],
       ['plates', 'Plates \u2014 one black film per band, for burning screens', () => void this.exportPlateFiles()],
     ];
     sel.append(new Option('Export\u2026', ''));
